@@ -23,7 +23,7 @@ import { describe, it, expect } from 'vitest'
 import { createEngineCrudRagStore } from '../../../src/main/engine-crud-rag-store.js'
 import { ConflictError } from '../../../src/main/engine-rag-store.js'
 import { handleRagDocHeadsIpc } from '../../../src/main/mcp-server.js'
-import type { RagStore } from '../../../src/main/rag-store.js'
+import type { BatchOp, RagStore } from '../../../src/main/rag-store.js'
 import type { RagDocHeadsPayload, RagStoreChangedPayload } from '../../../src/shared/types.js'
 import {
   announceAt,
@@ -39,6 +39,7 @@ import {
   jsonResponse,
   loadChangesModule,
   loadMirrorModule,
+  localDocOps,
   newRagStore,
   settled,
   shown,
@@ -665,5 +666,200 @@ describe('B-4a `D1`–`D4` — the states the failure table claims, each pinned 
       }
     }
     expect(problems, `D4:\n${problems.join('\n')}`).toEqual([])
+  })
+})
+
+// ===========================================================================
+// `F11` (`B4A-F11`) — THE DESCRIPTOR MAY NOT NAME A DOCUMENT THE WALK DID NOT LAND, REACHED THROUGH THE STORE-REFUSAL ARM.
+//
+// THE EXAMINER'S MEASURED READING (the L1 examination of the landed `B-4a`, LOW): with a store whose `applyBatch` REFUSES
+// (quarantine / teardown / a refused batch), `mirror.reconcile()` answered `nodeIds ['doc-p1','doc-p2']` while the SAME walk read
+// `projected 0 / failed 2`, and `handleRagDocHeadsIpc` read `[]`. A descriptor naming documents the projection did not land IS
+// `B4A-F5`'s lie — and `H5` does NOT pin this arm: `H5` covers only the TRUNCATED-walk arm, where `complete:false` alone forces the
+// empty answer. Here `complete` is TRUE and the projections were REFUSED, so the `complete` flag cannot see it: the walk reads
+// its own `apply()` verdicts back and must answer the LANDED ids, not the LISTED ones.
+//
+// WHAT THIS ROW ASSERTS (the required behaviour): `reconcile()`'s descriptor names ONLY the documents the walk actually PROJECTED
+// or already HELD EQUAL — never an id whose projection was refused or failed. The invariant that stands unchanged: a
+// truncated/partial list still writes nothing and names nothing (`ASM-L2-M2`, and `H5` keeps that arm).
+//
+// THE MUTANT THAT WOULD RED IT: "a `runWalk` that answers the LISTED ids instead of the LANDED ones" — i.e. today's
+// `return { ids, complete: true }` after a `for` loop whose `apply()` refusals it never reads back.
+//
+// THE FOUR LIMBS, and why (d) comes FIRST: (a) a PARTIAL refusal (the sharpest reading — one document lands, one is refused), (b)
+// the examiner's exact fixture (EVERY batch refused), (c) a REFUSED COLLISION (the record at the id is a LOCAL document, so the
+// mirror may not name it as projected), and (d) the CONTROL that makes (a)–(c) non-vacuous: the same two-document read over a
+// plain real store whose batch is ACCEPTED, where both ids must be named in the list's order.
+// ===========================================================================
+
+/** The refusal is INJECTED at the STORE's one writer; every READ stays the real store's (so the doc-heads read is a real read). */
+function storeRefusing(store: RagStore, refuse: (ops: BatchOp[]) => boolean): RagStore {
+  return new Proxy(store, {
+    get(target, prop) {
+      if (prop === 'applyBatch') {
+        return async (ops: BatchOp[]) =>
+          refuse(ops) ? { ok: false as const, error: 'rag applyBatch: refused by the F11 row', failedIndex: 0 } : target.applyBatch(ops)
+      }
+      const value = Reflect.get(target, prop, target) as unknown
+      return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(target) : value
+    },
+  }) as RagStore
+}
+
+/** The engine-origin descriptor's FOUR keys, sorted — the shape `reconcile()` must still answer (§2, `ASM-B4A-2`). */
+const F11_FOUR_KEYS = 'edgeIds,kind,nodeIds,store'
+
+/** The four-key/engine-origin shape every `reconcile()` answer in this row must carry, reported with the limb's own label. */
+function descriptorShape(label: string, answer: RagStoreChangedPayload): string[] {
+  const problems: string[] = []
+  const keys = Object.keys(answer).sort().join(',')
+  if (keys !== F11_FOUR_KEYS) {
+    problems.push(`${label}: the descriptor's keys read \`${keys}\` — \`reconcile()\` answers the FOUR-key engine-origin descriptor (\`${F11_FOUR_KEYS}\`)`)
+  }
+  if (answer.kind !== 'structural') problems.push(`${label}: \`kind\` reads ${shown(answer.kind)} — the walk's descriptor is \`structural\``)
+  if (answer.store !== 'gnosis:engine') problems.push(`${label}: \`store\` reads ${shown(answer.store)} — the walk's descriptor carries the engine origin \`gnosis:engine\``)
+  if (shown(answer.edgeIds) !== shown([])) problems.push(`${label}: \`edgeIds\` reads ${shown(answer.edgeIds)} — a document-list walk names no edges`)
+  return problems
+}
+
+describe('B-4a `F11` (B4A-F11) — `reconcile()` names only what the walk PROJECTED, reached through the STORE-REFUSAL arm', () => {
+  it('F11 — a REFUSED batch is not a landed projection: the descriptor names only what landed (CONTROL: nothing refused ⇒ both named)', async () => {
+    const problems: string[] = []
+    const mod = await loadMirrorModule()
+    problems.push(...mod.problems)
+    // THE ONE READ all four limbs share: TWO documents, and the list CLAIMS to be complete (`complete: true`), which is what makes
+    // limb (b) the arm `H5` cannot see — the flag is honest about the READ and silent about the PROJECTION.
+    const readTwo = async (): Promise<MirrorReadAnswer> => ({
+      documents: [
+        { documentId: 'doc-r1', title: 'R1' },
+        { documentId: 'doc-r2', title: 'R2' },
+      ],
+      complete: true,
+    })
+
+    // ---- (d) THE CONTROL, FIRST: the same read over a plain REAL store whose batch is ACCEPTED ------------------------------
+    // Without this limb a row that asserted "the descriptor names nothing" would pass for a mirror that never walks at all.
+    const control = newRagStore()
+    const controlMirror = constructMirror(mod.createEngineMirror, { store: () => control.store, read: readTwo }, problems)
+    if (controlMirror !== null) {
+      const answer = await controlMirror.reconcile()
+      const status = controlMirror.status()
+      const heads = handleRagDocHeadsIpc(control.store)
+      problems.push(...descriptorShape('F11 CONTROL', answer))
+      if (shown(answer.nodeIds) !== shown(['doc-r1', 'doc-r2'])) {
+        problems.push(
+          `F11 CONTROL: \`reconcile()\` answered nodeIds ${shown(answer.nodeIds)} over an ACCEPTED store while the walk read ` +
+            `projected ${String(status.projected)} / failed ${String(status.failed)} — nothing was refused, so BOTH listed ids must be named, in the list's order`,
+        )
+      }
+      if (status.projected !== 2) {
+        problems.push(`F11 CONTROL: \`status().projected\` read ${String(status.projected)} (lastFailure ${shown(status.lastFailure)}) — the accepted store lands both projections, so the refusal limbs below have a subject`)
+      }
+      if (status.failed !== 0) {
+        problems.push(`F11 CONTROL: \`status().failed\` read ${String(status.failed)} over an ACCEPTED store (lastFailure ${shown(status.lastFailure)}) — no fault may be counted where none occurred`)
+      }
+      if (heads.documents.length !== 2 || rowFor(heads, 'doc-r1')?.title !== 'R1' || rowFor(heads, 'doc-r2')?.title !== 'R2') {
+        problems.push(`F11 CONTROL: the doc-heads read answered ${shown(heads.documents)} — the accepted walk projects BOTH documents (R1 / R2), which is what the refused limbs then withhold`)
+      }
+    }
+
+    // ---- (a) THE PARTIAL REFUSAL, the sharpest reading: only the batch naming `doc-r2` is refused -------------------------
+    const partial = newRagStore()
+    const partialStore = storeRefusing(partial.store, (ops) => ops.some((op) => op.op === 'putNode' && op.node.id === 'doc-r2'))
+    const partialMirror = constructMirror(mod.createEngineMirror, { store: () => partialStore, read: readTwo }, problems)
+    if (partialMirror !== null) {
+      const answer = await partialMirror.reconcile()
+      const status = partialMirror.status()
+      // The doc-heads read is taken on the REAL store object, never the proxy: the reading is what the pane would see.
+      const heads = handleRagDocHeadsIpc(partial.store)
+      problems.push(...descriptorShape('F11(a)', answer))
+      if (shown(answer.nodeIds) !== shown(['doc-r1'])) {
+        problems.push(
+          `F11(a): \`reconcile()\` answered nodeIds ${shown(answer.nodeIds)} while the walk read projected ${String(status.projected)} / failed ` +
+            `${String(status.failed)} — the descriptor names a document the walk did not land (\`B4A-F5\`'s rule, reached through the ` +
+            `STORE-REFUSAL arm which \`H5\` does not pin)`,
+        )
+      }
+      if (status.projected !== 1) {
+        problems.push(`F11(a): \`status().projected\` read ${String(status.projected)} — one batch was accepted, so exactly ONE projection landed (lastFailure ${shown(status.lastFailure)})`)
+      }
+      if (status.failed !== 1) {
+        problems.push(`F11(a): \`status().failed\` read ${String(status.failed)} — the refused batch is ONE contained, counted failure (lastFailure ${shown(status.lastFailure)})`)
+      }
+      if (heads.documents.length !== 1 || heads.documents[0]?.documentId !== 'doc-r1' || heads.documents[0]?.title !== 'R1') {
+        problems.push(`F11(a): the doc-heads read answered ${shown(heads.documents)} — only \`doc-r1\` / 'R1' landed, so the descriptor's one named id is the only row the pane can find`)
+      }
+      if (rowFor(heads, 'doc-r2') !== undefined) {
+        problems.push(`F11(a): the doc-heads read answered a row for \`doc-r2\` (${shown(rowFor(heads, 'doc-r2'))}) — its batch was REFUSED, so nothing of it may be visible OR named`)
+      }
+    }
+
+    // ---- (b) THE TOTAL REFUSAL — the examiner's exact fixture: EVERY batch refused --------------------------------------
+    const total = newRagStore()
+    const totalBefore = storeCounts(total.store)
+    const totalStore = storeRefusing(total.store, () => true)
+    const totalMirror = constructMirror(mod.createEngineMirror, { store: () => totalStore, read: readTwo }, problems)
+    if (totalMirror !== null) {
+      const answer = await totalMirror.reconcile()
+      const status = totalMirror.status()
+      problems.push(...descriptorShape('F11(b)', answer))
+      if (shown(answer.nodeIds) !== shown([])) {
+        problems.push(
+          `F11(b): \`reconcile()\` answered nodeIds ${shown(answer.nodeIds)} with EVERY batch refused — the walk read projected ${String(status.projected)} / ` +
+            `failed ${String(status.failed)}, so the examiner's reading (\`nodeIds ['doc-p1','doc-p2']\` against \`projected 0 / failed 2\`) is reproduced`,
+        )
+      }
+      if (status.projected !== 0) {
+        problems.push(`F11(b): \`status().projected\` read ${String(status.projected)} — no batch was accepted`)
+      }
+      if (status.failed !== 2) {
+        problems.push(`F11(b): \`status().failed\` read ${String(status.failed)} — the two refused batches are two contained failures (lastFailure ${shown(status.lastFailure)})`)
+      }
+      if (typeof status.lastFailure !== 'string' || !status.lastFailure.includes('apply:')) {
+        problems.push(`F11(b): \`status().lastFailure\` read ${shown(status.lastFailure)} — a refused batch is named by its \`apply:\` fault, never thrown`)
+      }
+      if (handleRagDocHeadsIpc(total.store).documents.length !== 0) {
+        problems.push(`F11(b): the doc-heads read answered ${shown(handleRagDocHeadsIpc(total.store).documents)} — a refused batch writes NOTHING the pane can read`)
+      }
+      if (shown(storeCounts(total.store)) !== shown(totalBefore)) {
+        problems.push(`F11(b): the store counts moved from ${shown(totalBefore)} to ${shown(storeCounts(total.store))} across a walk whose every batch was refused — a refusal is a contained no-write`)
+      }
+    }
+
+    // ---- (c) A REFUSED (collision) ID IS NOT NAMED EITHER: the record at `doc-c` is a LOCAL document ----------------------
+    const local = newRagStore()
+    const seeded = await local.store.applyBatch(localDocOps('doc-c', 'LOCAL TITLE'))
+    if (seeded.ok !== true) {
+      problems.push(`F11(c) CONTROL: the LOCAL document at \`doc-c\` did not land (${shown(seeded)}) — the collision has no subject`)
+    }
+    const readLocalCollision = async (): Promise<MirrorReadAnswer> => ({
+      documents: [{ documentId: 'doc-c', title: 'ENGINE TITLE' }],
+      complete: true,
+    })
+    const collisionMirror = constructMirror(mod.createEngineMirror, { store: () => local.store, read: readLocalCollision }, problems)
+    if (collisionMirror !== null) {
+      const answer = await collisionMirror.reconcile()
+      const status = collisionMirror.status()
+      const heads = handleRagDocHeadsIpc(local.store)
+      problems.push(...descriptorShape('F11(c)', answer))
+      if (shown(answer.nodeIds) !== shown([])) {
+        problems.push(
+          `F11(c): \`reconcile()\` answered nodeIds ${shown(answer.nodeIds)} while the walk read projected ${String(status.projected)} / refused ` +
+            `${String(status.refused)} — the mirror does not own \`doc-c\`, so it may not name it as projected`,
+        )
+      }
+      if (status.refused !== 1) {
+        problems.push(`F11(c): \`status().refused\` read ${String(status.refused)} — a LOCAL document holding the engine id is REFUSED and counted, never clobbered (§5's last clause)`)
+      }
+      if (status.projected !== 0) {
+        problems.push(`F11(c): \`status().projected\` read ${String(status.projected)} — a refused collision projects nothing`)
+      }
+      const row = rowFor(heads, 'doc-c')
+      if (row === undefined || row.title !== 'LOCAL TITLE') {
+        problems.push(`F11(c): the doc-heads read answered ${shown(row)} — the LOCAL document must still answer its own title ('LOCAL TITLE'), never the engine's`)
+      }
+    }
+
+    expect(problems, `F11:\n${problems.join('\n')}`).toEqual([])
   })
 })

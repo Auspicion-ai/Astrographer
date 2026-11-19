@@ -313,6 +313,16 @@ function resolveEngineBaseUrl(): string {
 const RECONCILE_PAGE_SIZE = 200
 const RECONCILE_MAX_PAGES = 50
 
+/** Unit `B-4a` `engine-store-mirror` §5 site 1 — THE ONE BOUND ON ONE WALK (`B4A-F12`). The mirror projects a walk's list WHOLE or
+ *  not at all, so a list ONE id over its `maxPerWalk` projects NOTHING — silently, from the pane's point of view. The walk below
+ *  crosses EVERY wiki, so its ceiling is this product PER WIKI while the module's bound is on the SUMMED list (`B4A-F9`'s class,
+ *  one threshold down). So BOTH sides read THIS ONE number — the option handed to the mirror and the ceiling the accumulation
+ *  stops at — and the walk stops there and reports PARTIAL (`complete: false`) when ONE MORE id WOULD exceed it, which the module
+ *  counts `failed` and answers with an EMPTY descriptor. AT the bound nothing is dropped, so the list stays complete (`F12` limb D
+ *  drives both sides). That empty descriptor is byte-identical to a legitimate empty engine's: the distinct state is `status()`'s,
+ *  and no IPC/MCP surface reads `status()` today (a diagnostic stated, not implied). The two bounds cannot disagree. */
+const MIRROR_MAX_PER_WALK = RECONCILE_PAGE_SIZE * RECONCILE_MAX_PAGES
+
 /** Unit A2 §5.4 — load the shell-side `AuthorityStore` mapping (H3): the
  *  callerId → edit-authority-credential mapping. It is a boot-time, in-memory
  *  mapping loaded from the shell's operator settings (the same operator-settings
@@ -851,10 +861,11 @@ async function main(): Promise<void> {
   const engineMirror = createEngineMirror({
     origin: ENGINE_ORIGIN_STORE,
     store: () => runtime.getDefaultStore(),
-    // THE TWO BOUNDS MUST AGREE (adversarial `B4A-F9`): the walk below can read at most `RECONCILE_PAGE_SIZE × RECONCILE_MAX_PAGES`
-    // ids per wiki, so the module's own per-walk bound is stated HERE as that same product rather than left at a tighter, invisible
-    // default — a mirror whose bound is smaller than its reader's simply never projects when they disagree.
-    maxPerWalk: RECONCILE_PAGE_SIZE * RECONCILE_MAX_PAGES,
+    // THE TWO BOUNDS ARE ONE BOUND (adversarial `B4A-F9`, and `B4A-F12` closes its remaining gap): a mirror whose bound is smaller
+    // than its reader's simply never projects when they disagree, so the module's per-walk bound is stated HERE as the SAME number
+    // the `read` closure below STOPS ACCUMULATING at — one constant, two consumers, so no wiki count can make the two disagree. The
+    // walk reports itself PARTIAL (`complete: false`) at that ceiling rather than handing over a list the module must reject whole.
+    maxPerWalk: MIRROR_MAX_PER_WALK,
     read: async (): Promise<EngineMirrorRead> => {
       const documents: EngineMirrorDocument[] = []
       let complete = true
@@ -862,12 +873,20 @@ async function main(): Promise<void> {
       for (const wiki of wikis) {
         let seen = 0
         let closed = false
+        let capped = false
         for (let page = 1; page <= RECONCILE_MAX_PAGES; page += 1) {
           const listed = await engineCrudRagStore.listDocuments({
             wikiId: wiki.wikiId,
             body: { state: null, tag: null, page, pageSize: RECONCILE_PAGE_SIZE },
           })
           for (const document of listed.items) {
+            // THE ONE BOUND, AT THE ACCUMULATION SIDE (`B4A-F12`): the module projects a list WHOLE or not at all, so accumulating
+            // past its own `maxPerWalk` would turn a large engine into a silent nothing. Stop AT the bound and let the walk report
+            // itself PARTIAL below — the module then names the state on `status()` and answers an empty descriptor, honestly.
+            if (documents.length >= MIRROR_MAX_PER_WALK) {
+              capped = true
+              break
+            }
             documents.push({ documentId: document.documentId, title: document.title, updatedAt: document.updatedAt })
           }
           seen += listed.items.length
@@ -875,9 +894,12 @@ async function main(): Promise<void> {
             closed = true
             break
           }
+          // Nothing further can be named, so no further wiki or page is read: the ceiling is the whole walk's, not one wiki's.
+          if (capped) break
         }
-        // A wiki whose walk hit the page bound leaves the list PARTIAL — and a partial list may never license a delete.
-        if (!closed) complete = false
+        // A wiki whose walk hit the page bound — or the ONE bound above — leaves the list PARTIAL, and a partial list may never license a delete.
+        if (!closed || capped) complete = false
+        if (capped) break
       }
       return { documents, complete }
     },
@@ -905,7 +927,7 @@ async function main(): Promise<void> {
   // exists and has loaded (see the banner at that site; `F-2`, ruled by `L1`).
   //
   // (1) THE CONSTRUCTION is INERT — `createEngineChangesFeed` opens no socket and reads nothing (the `createEngineRagStore`
-  //     discipline two lines up, `:827-832`), so it sits beside the two engine proxies (`:832`, `:893`) and AFTER the CRUD proxy
+  //     discipline two lines up, `:837-842`), so it sits beside the two engine proxies (`:842`, `:919`) and AFTER the CRUD proxy
   //     its `reconcile` closes over.
   // (2) THE RE-READ is the FULL engine CRUD read (§2.4, `ASM-B4-3` — the callable is INJECTED, so the consumer holds no CRUD
   //     surface of its own): every wiki, then EVERY PAGE of each wiki's documents, answered as ONE `structural` descriptor naming
@@ -1435,7 +1457,7 @@ async function main(): Promise<void> {
   // Unit `B-4` `engine-changes` §4 site (4) — **THE FEED CONNECTS HERE, AND ONLY HERE** (`F-2`, ruled by `L1`): the window exists
   // (`new BrowserWindow` above, `backend.attachWindow` binds it) and its content has loaded, so the connection's announcement, the
   // re-read's descriptor and every later frame of that connection land in a realm that can receive them. **NOT AWAITED** — an
-  // absent engine must never hold the boot (the `waitForReady`-is-not-awaited precedent, `:828-829`), and `connect()` never
+  // absent engine must never hold the boot (the `waitForReady`-is-not-awaited precedent, `:839-841`), and `connect()` never
   // rejects (`c8`). The re-read now starts from the connection's own announcement, not from this call (`ASM-B4-5`), so the moment
   // of this call costs nothing but the realm. What this site does NOT claim: that the renderer has already registered its
   // `rag-store-changed` listener (`SidebarPanes.boot()`'s byte, `B-6`/`B-8`'s receipt).

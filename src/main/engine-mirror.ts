@@ -52,7 +52,9 @@ export interface EngineMirrorOptions {
   read: () => Promise<EngineMirrorRead>
   /** The engine-origin label; defaults to `ENGINE_ORIGIN_STORE`. */
   origin?: string
-  /** A bound on how many listed ids ONE walk may project; a list beyond it writes NOTHING (a partial list is not a list). */
+  /** A bound on how many listed ids ONE walk may project; a list beyond it writes NOTHING (a partial list is not a list).
+   *  `main.ts` passes the ONE named bound (`MIRROR_MAX_PER_WALK`) and STOPS ACCUMULATING at it, reporting `complete: false`
+   *  (`B4A-F12`), so this check is a backstop its reader cannot reach — not a threshold the two sides could disagree on. */
   maxPerWalk?: number
 }
 
@@ -130,6 +132,9 @@ type Verdict =
   | { kind: 'refused' }
 
 interface WalkAnswer {
+  /** THE IDS THE WALK MAY NAME (`B4A-F11`): exactly the documents whose projection LANDED or already held EQUAL — never one whose
+   *  batch the STORE refused, never one the MARKER refused, and NOTHING AT ALL from a walk that did not complete (which writes
+   *  nothing, so it may name nothing). `reconcile()`'s descriptor is built from this field and no other. */
   ids: string[]
   complete: boolean
 }
@@ -349,26 +354,32 @@ export function createEngineMirror(opts: EngineMirrorOptions): EngineMirror {
     }
   }
 
-  /** ONE batch through the store's OWN single writer, and the verdict counted — a `{ok:false}` is a CONTAINED failure. */
-  const apply = async (store: RagStore, verdict: Verdict): Promise<void> => {
+  /** ONE batch through the store's OWN single writer, and the verdict counted — a `{ok:false}` is a CONTAINED failure.
+   *  It answers TRUE only when the store now HOLDS what the verdict asked for: `projected` (one batch landed) or `unchanged` (it
+   *  already held it equal). `refused` (a record the mirror does not own) and EVERY failed batch answer FALSE — which is what keeps
+   *  `reconcile()`'s descriptor from naming a document the walk did not land (adversarial `B4A-F11`: `F5`'s rule, reached through
+   *  the STORE-REFUSAL arm, which `H5` does not pin). */
+  const apply = async (store: RagStore, verdict: Verdict): Promise<boolean> => {
     if (verdict.kind === 'unchanged') {
       counts.unchanged += 1
-      return
+      return true
     }
     if (verdict.kind === 'refused') {
       counts.refused += 1
-      return
+      return false
     }
     try {
       const result = await store.applyBatch(verdict.ops)
       if (!result.ok) {
         fail(`apply: ${result.error}`)
-        return
+        return false
       }
       if (verdict.kind === 'projected') counts.projected += 1
       else counts.removed += 1
+      return true
     } catch (err) {
       fail(`apply: ${describe(err)}`)
+      return false
     }
   }
 
@@ -403,23 +414,30 @@ export function createEngineMirror(opts: EngineMirrorOptions): EngineMirror {
     // list it describes is wholly readable, or one unreadable entry silently licenses deleting that document.
     if (documents.length !== listing.documents.length) {
       fail(`walk: the list carries ${listing.documents.length - documents.length} malformed entry(ies)`)
-      return { ids, complete: false }
+      return { ids: [], complete: false }
     }
     if (listing.complete !== true) {
       fail('walk: truncated — the list read did not claim to be complete')
-      return { ids, complete: false }
+      return { ids: [], complete: false }
     }
     if (documents.length > maxPerWalk) {
       fail(`walk: over-bound — ${documents.length} id(s) read, maxPerWalk ${maxPerWalk}`)
-      return { ids, complete: false }
+      return { ids: [], complete: false }
     }
     const store = currentStore()
     if (store === null) {
       fail('walk: store absent')
-      return { ids, complete: false }
+      return { ids: [], complete: false }
     }
     const listed = new Set(ids)
-    for (const document of documents) await apply(store, planUpsert(store, document))
+    // THE ANSWER NAMES ONLY WHAT THE WALK LANDED (`B4A-F11`). `ids` is every id the LIST read; `named` is only what the store now
+    // holds as this projection — `projected` or already `unchanged` — so a document whose batch the store REFUSED (quarantine,
+    // teardown, `{ok:false}`) or whose id a LOCAL record holds (`refused`) is not named, because naming it would claim a projection
+    // the re-read can then not find: the `F5` lie, one arm lower. A walk that did not complete writes nothing and so names nothing.
+    const named: string[] = []
+    for (const document of documents) {
+      if (await apply(store, planUpsert(store, document))) named.push(document.documentId)
+    }
     // §5(ii): a COMPLETE walk is the only thing that may delete on ABSENCE, and only for a MARKED root (the mirror's own).
     try {
       const stale = store.listNodes().filter((node) => isProjectionRoot(node) && !listed.has(node.id))
@@ -427,7 +445,7 @@ export function createEngineMirror(opts: EngineMirrorOptions): EngineMirror {
     } catch (err) {
       fail(`walk: store read failed (${describe(err)})`)
     }
-    return { ids, complete: true }
+    return { ids: named, complete: true }
   }
 
   const start = (): void => {
@@ -528,7 +546,9 @@ export function createEngineMirror(opts: EngineMirrorOptions): EngineMirror {
 
   /** The feed's `reconcile`: walk + project + answer, so the re-read's answer and the projection are ONE act (contract §5 limb (i)).
    *  A walk that could not complete projected NOTHING, so it names NOTHING — a truncated read answering ids it never projected is the
-   *  `F-4` lie one layer down (adversarial `B4A-F5`). */
+   *  `F-4` lie one layer down (adversarial `B4A-F5`). And a walk that completed names only the ids it LANDED, never one whose
+   *  projection the store refused or the marker refused (`B4A-F11`: the `F5` shape through the STORE-REFUSAL arm — the answer and the
+   *  projection cannot disagree, which is what makes this ONE act rather than two that are supposed to agree). */
   const reconcile = async (): Promise<RagStoreChangedPayload> => {
     const answer = await submit('walk')
     const ids = answer !== null && answer.complete ? [...answer.ids] : []

@@ -55,7 +55,7 @@
         "tests/unit/gnosis-changes",
         "tests/integration/gnosis-changes"
       ],
-      "endpoints": 4
+      "endpoints": 11
     }
   ]
 }

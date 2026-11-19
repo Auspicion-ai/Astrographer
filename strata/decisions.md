@@ -945,3 +945,44 @@ the engine branch is a legal discriminator with no data behind it, and the unit'
 
 **One L0 commit is corrected:** my `c253820` said `B-6`'s live reading was "not claimed" — true of the state I
 sampled, false of the unit; the seat drove it afterwards. Kept as the record of a timing sample, not of a verdict.
+
+---
+
+## D-41 — `B-4a` lands: the engine path is complete in the fork, and the `N` definition is named at last
+
+**Status:** ACTIVE · **Date:** 2026-11-19 · **Source (measurement):** `B-4a`'s return, re-verified in this seat
+(the gnosis-changes batteries 85/85; `typecheck` 0; `build` 0; `drift` CLEAN with its pin arm equal; the suite at
+its clean floor)
+
+**The route, as the unit argued it:** BOTH of the grant's arms converged on ONE projection in a new
+`src/main/engine-mirror.ts` — the engine CRUD surface's **accepted** write (`onAccepted`, fired after the
+response decodes and awaited before the proxy resolves) and the change **descriptor as a TRIGGER only**.
+(a) alone misses the origin the unit exists for; (b) alone is dead behind the engine's refusal; and (b) cannot
+carry the document because the engine's `nodeIds` are **graph node ids**, so a descriptor-driven mirror must ask
+the engine for its authoritative document list. **Cost, stated:** one journaled local batch per projected
+change through the store's own `applyBatch` (so `rag-store.ts` takes zero byte), the fork's mutating engine call
+waits on that batch, one bounded coalesced walk per structural descriptor plus one duplicated walk per connect,
+and limb-(b) projections carry id + title only.
+
+**The readings that decide it, verbatim:** `E1` — the doc-heads answers `[]` → `[{documentId:'d1', title:
+'Getting Started', path:[], tags:['guide']}]`, `accepted 1 / projected 1`. `E2` — a document the fork NEVER
+wrote: `[]` → at the **broadcast instant** `doc-e / 'Engine Doc'`, `walks 3`, sink order = frame order.
+**The mutation that un-mirrors only:** delete the seam's one `onAccepted` call → **`E1` alone** reds while
+`E2` and every `c` row stay green — and that FALSIFIED a sentence of the unit's own contract, recorded as
+`B4A-F10` rather than smoothed.
+
+**The `N` DEFINITION, named at last (the question `D-35` and `D-37` left PROVISIONAL):** for this program `N`
+is the count of **export declarations the module's files carry** — `gnosis-changes` was 4 (`B-4`) and the mirror
+adds 7, so it is **11**, cap 160. `shell-chrome`'s 34 (cap 390) and `record-engine`'s 7 (cap 120) stand on the
+same reading; `foundation-vendor`'s 3 (cap 80) is the drift instrument's exported functions. **The rule is now
+stated, so the next unit moves a figure only by adding exports** — and if a future pass judges the definition
+wrong, it re-states ALL FOUR together rather than one.
+
+**Carried with an owner:** `B4A-F13` (LOW) — the walk's `complete` rests on the engine's own `total`, so an
+engine that under-reports could license one over-eager DELETE. The remedy is named (`ASM-B4A-6`: proof-of-end is
+a short/empty terminal page, `total` a hint) and NOT taken, because taking it re-grains a sibling unit's row
+(`B-4`'s `c9(h)`); the projection restores itself on the next walk. **Owed:** `G6`'s blind greens, the live
+block in `scripts/live-drive.mjs`, and the adapter note below.
+
+**And the engine path is COMPLETE in the fork:** engine write → mirror → store → doc-heads, and engine change →
+consumer → pane. The only refusal left is the engine's own, and no engine event has been received anywhere.
