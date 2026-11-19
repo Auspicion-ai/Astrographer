@@ -804,3 +804,32 @@ it.
 instrument derives it and `modules.md` §3 and `platform.md` §4 disagree on the definition. `shell-chrome`'s
 `N` therefore stays **34 as a PROVISIONAL figure whose definition is owed**, and the next unit that touches the
 map must state the definition it counts rather than move the number.
+
+---
+
+## D-36 — `B-4` lands envelope-green with its live arm PARKED on the engine's refusal; the consumer is built to the engine's own measured shape
+
+**Status:** ACTIVE · **Date:** 2026-11-18 · **Source (measurement):** `B-4`'s pass, re-verified in this seat (its
+rows 51/51; the full suite at its clean floor; `typecheck` 0; `build` 0; `drift` CLEAN with its pin arm equal;
+`node --check` 0)
+
+**Decision:** `B-4` `engine-changes` lands ENVELOPE-GREEN. The fork now has a consumer of the engine's
+`GET /changes` feed, built to the engine's OWN measured shape rather than to a summary of it: the route at
+`../Gnosis`'s `src/bin/gnosis_server.rs:1056`, the cursor-first frame at `:983-986`, `change_frame` at
+`:936-950`, `cursor` a **decimal string over a `u64`**, `wikiId` nullable, the edge ids as six-term canonical
+JSON-array strings, `kind` from a closed twenty-token set that a consumer MUST tolerate an unknown member of,
+and **no request-side cursor** (`:972-976`) — which is why a reconnect is a **RE-READ** and never a delta claim
+(`ASM-B-4`), anchored to the announcement so the window `(floor, head]` is not silently skipped (`ASM-B4-5`).
+
+**The three behaviours are node-proven:** the frame parse and the mapping into the fork's fixed
+four-member `RagStoreChangedPayload`; cursor de-dup (a frame at or below the head is dropped, a replay row
+proves it); and reconnect-by-re-read with the re-read ordered BEFORE any later frame is applied.
+
+**The live arm is PARKED, and the park is the same one `B-3` recorded:** the engine refuses this fork's query
+client (`sse: non-2xx` on the GET, `malformed envelope: schemaVersion` on the POST —
+`docs/defects.md` `GNOSIS-ENGINE-REFUSES-THE-FORK-QUERY-CLIENT`). **What would exercise it:** an engine that
+accepts the fork's subscription request, after which a journal commit should arrive as one frame and reach a
+pane through `B-3`'s channel. No engine event was received at this head and none is claimed.
+
+**A unit that ends a program's data path rather than a screen:** with `B-4` landed, the engine→store→pane path
+exists in every link except the one the engine itself refuses.

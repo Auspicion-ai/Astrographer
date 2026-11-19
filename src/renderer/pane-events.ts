@@ -5,11 +5,18 @@
 //   · the RECORD arm   — `B-1`'s delivery → `B-2`'s payload-free push → the display client's re-read → `deliver()`, which
 //     fires every pane that DECLARED record interest through the SAME `fire`.
 //
-// **ONE registry, TWO declarations, ONE dispatch — the arms cannot diverge BY CONSTRUCTION.** `subscribeRecord(id, h)` IS
+// **ONE registry, THREE declarations, ONE dispatch — the arms cannot diverge BY CONSTRUCTION.** `subscribeRecord(id, h)` IS
 // `subscribe(id, h)` PLUS a record-interest mark, so the handler lives in the ONE map and `deliver()` reaches it only through
 // `fire()`. A second dispatch — even an identical one — would be a second authority for one event, and the moment either copy
 // learnt a rule the other did not, the two arms would answer differently for the same instance. `r7`'s source clause grades
 // that sentence over this file's own TEXT (comments stripped) and proves it falsifiable with two mutants.
+//
+// **THE THIRD DECLARATION IS UNIT `B-4` `engine-changes`'s, AND IT IS AN ADDITION ON THIS SAME REGISTRY**
+// (`docs/L1/unit-b-4-engine-changes.md` §4): `subscribeChange(id, h)` is `subscribe` PLUS a CHANGE-interest mark — "this pane
+// follows data the ENGINE can change" — and `publishChange()` fires every change-interested pane THROUGH the same `fire`, its
+// twin `deliver()`. The mark is a SECOND SET of the same registration tokens, never a second handler map and never a second
+// dispatch: `deliver()` and `publishChange()` cannot reach a handler except through `fire(id)`. It carries NO payload (`B-2`'s
+// push is payload-free), so the pane re-reads its own subject either way.
 //
 // **TOTALITY, AND EVERY ABSENT ARM IS A DECLARED ANSWER** (`src/renderer/pane-registry.ts:93-104` is the precedent — its
 // SNAPSHOT iteration and its per-callback `try`/`catch`, NOT its `requireKnown` throw):
@@ -21,15 +28,18 @@
 //     census nor be fired;
 //   · the release a subscription answers is TOTAL and IDEMPOTENT: twice is once, an unknown id is a no-op, and a release never
 //     throws;
-//   · both censuses answer COPIES, so a caller cannot author who reads the record.
+//   · all three censuses answer COPIES, so a caller cannot author who reads the record or who hears the engine.
 //
-// **`deliver()` CARRIES NOTHING AND ADDRESSES NOTHING** (`B-2`'s push is payload-free), so this module holds **NO**
-// address→pane table (`CRG-1`'s shape, one realm up): a pane DECLARES its interest and its handler re-reads whatever it needs.
-// The shipped record-interest census is EMPTY and that is a DECLARATION, not an accident — no pane renders display state today;
-// `B-10` authors the FIRST reader (`O-4`).
+// **`deliver()` AND `publishChange()` CARRY NOTHING AND ADDRESS NOTHING** (`B-2`'s push is payload-free), so this module holds
+// **NO** address→pane table (`CRG-1`'s shape, one realm up): a pane DECLARES its interest and its handler re-reads whatever it
+// needs. The shipped record-interest census is EMPTY and that is a DECLARATION, not an accident — no pane renders display state
+// today; `B-10` authors the FIRST reader (`O-4`). **The shipped CHANGE-interest census is EMPTY for the same reason and is the
+// same kind of declaration** — no pane follows an engine-originated change until `B-6` (doc-nav) and `B-8` (the gnosis family),
+// which the map's §4 edge table assigns; this module ships the ARM, and the arm is proven movable by its rows.
 //
 // **AND IT IS TIMERLESS** (`D-82` clause 4's discipline): no timer, no poll, no retry, no queue, no deferred work. A fire is a
-// synchronous pass over the handlers that stand at that instant, and `deliver()` is a synchronous pass over the declared set.
+// synchronous pass over the handlers that stand at that instant, and `deliver()`/`publishChange()` are synchronous passes over
+// their declared sets.
 //
 // PURE: no Electron, no DOM, no store, no runtime, no I/O — the unit's `r3`/`r4`/`r7`/`r9` rows drive it with nothing else.
 
@@ -75,10 +85,16 @@ export interface PaneEvents {
   subscribeRecord(paneId: string, handler: (report: FireReport) => void): () => void
   /** The RECORD arm's entry: fires every record-interested pane THROUGH `fire`, answering their reports in census order. */
   deliver(): FireReport[]
+  /** `subscribe` PLUS a CHANGE-interest mark (unit `B-4`) — "this pane follows data the ENGINE can change", in the SAME registry. */
+  subscribeChange(paneId: string, handler: (report: FireReport) => void): () => void
+  /** The CHANGE arm's entry: fires every change-interested pane THROUGH `fire`, answering their reports in census order. */
+  publishChange(): FireReport[]
   /** The live pane census (a COPY, in declaration order). */
   panes(): string[]
   /** The record-interested census (a COPY). EMPTY at this head by declaration (`§2`). */
   recordPanes(): string[]
+  /** The change-interested census (a COPY). EMPTY at this head by declaration (no pane adopts it until `B-6`/`B-8`). */
+  changePanes(): string[]
 }
 
 /** A handler as the registry holds it. */
@@ -93,6 +109,10 @@ interface PaneRegistration {
   readonly handler: PaneHandler
 }
 
+/** Which interest set a registration TOKEN joins — the record arm's mark, the change arm's mark (`B-4`), or `null` for a plain
+ *  `subscribe`. One type for all three declarations is what keeps them one registry. */
+type Interest = 'record' | 'change'
+
 /** An id this channel can ADDRESS: a non-empty string. Everything else is a declared no-op at both entries — never a coercion
  *  into a keyspace (a `String(input)` would let `null` and `'null'` collide) and never a throw. */
 const addressable = (paneId: unknown): paneId is string => typeof paneId === 'string' && paneId.length > 0
@@ -105,12 +125,14 @@ const reportOf = (paneId: string, fired: boolean, handlers: number): FireReport 
   reason: fired ? 'fired' : 'no-listener',
 })
 
-/** **THE CHANNEL.** Two closed collections and six members, nothing else: `handlers` is the ONE registry keyed by pane id, and
- *  `interest` marks WHICH REGISTRATIONS declared record interest. The returned object is FROZEN (`B3-F13`): "one channel, one
- *  registry" is a fact of the value, not only a convention a caller may overwrite. */
+/** **THE CHANNEL.** Three closed collections and nine members, nothing else: `handlers` is the ONE registry keyed by pane id,
+ *  and `interest` / `changeInterest` mark WHICH REGISTRATIONS declared record / change interest (the same registration TOKENS,
+ *  two sets — never a second handler map). The returned object is FROZEN (`B3-F13`): "one channel, one registry" is a fact of
+ *  the value, not only a convention a caller may overwrite. */
 export function createPaneEvents(): PaneEvents {
   const handlers = new Map<string, PaneRegistration[]>()
   const interest = new Map<string, Set<PaneRegistration>>()
+  const changeInterest = new Map<string, Set<PaneRegistration>>()
 
   const fire = (paneId: string): FireReport => {
     const echo = typeof paneId === 'string' ? paneId : ''
@@ -130,17 +152,18 @@ export function createPaneEvents(): PaneEvents {
     return reportOf(echo, true, snapshot.length)
   }
 
-  /** ONE registration path for BOTH declarations — the reason the arms cannot diverge is that there is only one place a
-   *  handler is held, and `record` decides only whether an interest mark joins it. */
-  const register = (paneId: string, handler: PaneHandler, record: boolean): (() => void) => {
+  /** ONE registration path for ALL THREE declarations — the reason the arms cannot diverge is that there is only one place a
+   *  handler is held, and `mark` decides only which interest set (if any) the token joins. */
+  const register = (paneId: string, handler: PaneHandler, mark: Interest | null): (() => void) => {
     if (!addressable(paneId) || typeof handler !== 'function') return () => undefined
     const registration: PaneRegistration = { handler }
     const standing = handlers.get(paneId)
     if (standing === undefined) handlers.set(paneId, [registration])
     else standing.push(registration)
-    if (record) {
-      const marked = interest.get(paneId)
-      if (marked === undefined) interest.set(paneId, new Set([registration]))
+    const marks = mark === null ? null : mark === 'record' ? interest : changeInterest
+    if (marks !== null) {
+      const marked = marks.get(paneId)
+      if (marked === undefined) marks.set(paneId, new Set([registration]))
       else marked.add(registration)
     }
     let live = true
@@ -154,17 +177,21 @@ export function createPaneEvents(): PaneEvents {
         if (now.length === 0) handlers.delete(paneId)
       }
       // THE MARK IS WITHDRAWN BY TOKEN: exactly this registration's, never another registration of the same function.
-      const marked = interest.get(paneId)
-      if (marked !== undefined) {
-        marked.delete(registration)
-        if (marked.size === 0) interest.delete(paneId)
+      if (marks !== null) {
+        const marked = marks.get(paneId)
+        if (marked !== undefined) {
+          marked.delete(registration)
+          if (marked.size === 0) marks.delete(paneId)
+        }
       }
     }
   }
 
-  const subscribe = (paneId: string, handler: PaneHandler): (() => void) => register(paneId, handler, false)
+  const subscribe = (paneId: string, handler: PaneHandler): (() => void) => register(paneId, handler, null)
 
-  const subscribeRecord = (paneId: string, handler: PaneHandler): (() => void) => register(paneId, handler, true)
+  const subscribeRecord = (paneId: string, handler: PaneHandler): (() => void) => register(paneId, handler, 'record')
+
+  const subscribeChange = (paneId: string, handler: PaneHandler): (() => void) => register(paneId, handler, 'change')
 
   const deliver = (): FireReport[] => {
     const reports: FireReport[] = []
@@ -174,9 +201,20 @@ export function createPaneEvents(): PaneEvents {
     return reports
   }
 
+  /** `deliver`'s twin over the CHANGE-interested set — the same `fire`, so the two arms cannot diverge (`B-4` §4). */
+  const publishChange = (): FireReport[] => {
+    const reports: FireReport[] = []
+    for (const paneId of [...changeInterest.keys()]) {
+      reports.push(fire(paneId))
+    }
+    return reports
+  }
+
   const panes = (): string[] => [...handlers.keys()]
 
   const recordPanes = (): string[] => [...interest.keys()]
 
-  return Object.freeze({ subscribe, fire, subscribeRecord, deliver, panes, recordPanes })
+  const changePanes = (): string[] => [...changeInterest.keys()]
+
+  return Object.freeze({ subscribe, fire, subscribeRecord, deliver, subscribeChange, publishChange, panes, recordPanes, changePanes })
 }

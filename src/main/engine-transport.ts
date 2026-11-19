@@ -7,15 +7,18 @@
 // `dispatcher`.
 //
 // The pinned (safe) import cycle: this module imports the error model
-// (EngineWireError/EngineUnavailable) from engine-rag-store.js, and
-// engine-rag-store.ts imports the transport helpers from here. Neither module
-// uses the other's bindings at module-evaluation time (the error classes are
-// referenced only inside function bodies, resolved at call time) — the cycle is
-// intentional and MUST NOT be "fixed" by moving the error model.
+// (EngineWireError/EngineUnavailable) and the SSE client factory (createSseClient)
+// from engine-rag-store.js, and engine-rag-store.ts imports the transport helpers
+// from here. Neither module uses the other's bindings at module-evaluation time
+// (the error classes and the client factory are referenced only inside function
+// bodies, resolved at call time) — the cycle is intentional and MUST NOT be
+// "fixed" by moving the error model or the client.
 import { Agent, fetch as undiciFetch, request as undiciRequest } from 'undici'
 import {
   EngineWireError,
   EngineUnavailable,
+  createSseClient,
+  type SseClient,
 } from './engine-rag-store.js'
 
 /** Unit shell-integration §5.1 — the loopback-host superset (the union of both
@@ -201,3 +204,50 @@ export function createCrudFetch(
   }
   return fn as unknown as typeof fetch
 }
+
+// ---------------------------------------------------------------------------
+// Unit `B-4` `engine-changes` §3 — THE SUBSCRIPTION SEAM (this module's ONE addition for that unit).
+// ---------------------------------------------------------------------------
+
+/** The stream handlers the seam forwards: the fork's `SseClient` callback shape, unchanged (`engine-rag-store.ts:194-203`). */
+export interface EngineStreamHandlers {
+  onEvent(event: string, data: string): void
+  onError(err: unknown): void
+  onClose(): void
+}
+
+/** What a caller hands the seam: the base, the engine path, the optional auth and the optional injected client. */
+export interface EngineStreamOptions {
+  baseUrl: string
+  /** A path from the engine endpoint table (`ENGINE_ENDPOINTS.*`) — NEVER a URL and never a host. */
+  path: string
+  auth?: { token?: string }
+  /** The injectable stream client (the `EngineRagStoreOptions.sse` precedent, `engine-rag-store.ts:285`). */
+  sse?: SseClient
+  handlers: EngineStreamHandlers
+}
+
+/**
+ * Unit `B-4` §3 — open ONE engine SSE subscription THROUGH THE FORK'S ONE STREAM OPENER.
+ *
+ * `assertLoopback` runs BEFORE anything else (`:54-64`), so a non-loopback baseUrl is refused synchronously and the injected
+ * client's `subscribe` is NEVER called — the consumer that uses this seam therefore owns no loopback rule, no URL and no header,
+ * and a second spelling of the engine's transport cannot appear beside this one. The URL is `<base without trailing '/'>` +
+ * `<path>`, the same normalisation `createEngineRagStore` applies to its own base (`engine-rag-store.ts:854`). Every fault is
+ * translated through `transportError` (`:71-93`), INCLUDING a synchronous throw out of a client's `subscribe`.
+ */
+export function subscribeEngineStream(opts: EngineStreamOptions): { close(): void } {
+  assertLoopback(opts.baseUrl, 'engine stream')
+  const sse = opts.sse ?? createSseClient(opts.auth)
+  const url = `${opts.baseUrl.replace(/\/+$/, '')}${opts.path}`
+  try {
+    return sse.subscribe(url, {
+      onEvent: (event, data) => opts.handlers.onEvent(event, data),
+      onError: (err) => opts.handlers.onError(transportError(err)),
+      onClose: () => opts.handlers.onClose(),
+    })
+  } catch (err) {
+    throw transportError(err)
+  }
+}
+

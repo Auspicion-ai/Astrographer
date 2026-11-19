@@ -72,12 +72,26 @@ export const ENGINE_HTTP_STATUS: Record<EngineErrorCode, number> = {
   sub_task_dag_failed: 500,
 }
 
-/** Pinned endpoint paths (the shell's transport decision). */
+/** Pinned endpoint paths (the shell's transport decision). `changes` is Unit `B-4` `engine-changes`'s route — the engine's SSE
+ *  change feed (`../Gnosis/src/bin/gnosis_server.rs:1056`), pinned here with the other engine paths and NOT in the consumer
+ *  (`docs/L1/unit-b-4-engine-changes.md` §3). */
 export const ENGINE_ENDPOINTS = {
   ragQuery: '/rag/query',
   ragStream: '/rag/stream',
   engineStatus: '/engine/status',
+  changes: '/changes',
 } as const
+
+/** Unit `B-4` §2.2 (`ASM-B4-1`) — THE ENGINE-ORIGIN LABEL a change descriptor's `store` member carries. It is NOT a registry
+ *  name and provably cannot become one: `RAG_STORE_NAME_PATTERN` (`src/main/rag-store-registry.ts:58-60`) is
+ *  `/^[a-z0-9][a-z0-9_-]{0,63}$/` and refuses a colon. That is what keeps the renderer's fail-closed foreign-store guard
+ *  (`src/renderer/sidebar-panes.ts:3185-3189`) from ever accepting an ENGINE change as a LOCAL store change — an engine frame
+ *  must never re-derive the local graph. */
+export const ENGINE_ORIGIN_STORE = 'gnosis:engine'
+
+/** Unit `B-4` §3 — the change descriptor's type, re-exported from its ONE home (`src/shared/types.ts:415-421`) so the mapping
+ *  names the fork's own vocabulary instead of re-spelling it (the `src/main/preload.ts:33-36` pattern). */
+export type { RagStoreChangedPayload } from '../shared/types.js'
 
 // ---------------------------------------------------------------------------
 // The typed error model.

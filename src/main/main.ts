@@ -54,8 +54,9 @@ import { syncModuleRouter } from './mcp-server.js'
 import { SecurityGate, defaultSecurityConfig, enablementRequestFrom, effectiveEnabledGroups, type ToolGroup } from './security.js'
 import { IPC_BOOT_READY, type BootInstallSignal } from '../shared/types.js'
 import { createQueryAuditLog } from './query-audit.js'
-import { createEngineRagStore } from './engine-rag-store.js'
+import { createEngineRagStore, ENGINE_ORIGIN_STORE } from './engine-rag-store.js'
 import { createEngineCrudRagStore } from './engine-crud-rag-store.js'
+import { createEngineChangesFeed } from './engine-changes.js'
 import { createAuthorityStore } from './authority-store.js'
 import { createIdempotencyRegistry } from './idempotency-registry.js'
 // `B-2` `display-wire` — THE CROSSING'S MAIN HALF (`docs/L1/unit-b-1-record-engine-seam.md` §1's scope ruling 1 named THIS
@@ -302,6 +303,13 @@ function resolveEngineBaseUrl(): string {
   if (fromEnv) return fromEnv
   return 'http://127.0.0.1:8080'
 }
+
+/** Unit `B-4` §4 — the change feed's re-read page size and its page bound. `RECONCILE_PAGE_SIZE` sits well above any plausible
+ *  engine default, and `RECONCILE_MAX_PAGES` makes the walk FINITE even against a `total` that never agrees with the pages it
+ *  returns (this unit's adversarial finding `F-4`: the engine's CRUD list is PAGED, so ONE unpaged read reconciles the first page
+ *  only while claiming a full re-read). */
+const RECONCILE_PAGE_SIZE = 200
+const RECONCILE_MAX_PAGES = 50
 
 /** Unit A2 §5.4 — load the shell-side `AuthorityStore` mapping (H3): the
  *  callerId → edit-authority-credential mapping. It is a boot-time, in-memory
@@ -829,6 +837,65 @@ async function main(): Promise<void> {
   // tool. The AuthorityStore mapping is a boot-time, in-memory mapping (a change
   // requires a restart); a callerId with no entry has no edit authority.
   const engineCrudRagStore = createEngineCrudRagStore({ baseUrl: resolveEngineBaseUrl() })
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  // Unit `B-4` `engine-changes` — THE ENGINE CHANGE FEED'S WIRING, AND NOTHING ELSE (`docs/L1/unit-b-4-engine-changes.md` §4;
+  // `docs/L2/gnosis-changes/engine-changes.md` §4.4). FOUR SITES, AND THE SITE OF EACH IS PART OF THE CLAIM: three of them are in
+  // THIS block (in this order), and the fourth — `void engineChangesFeed.connect()` — is deliberately far below, AFTER the window
+  // exists and has loaded (see the banner at that site; `F-2`, ruled by `L1`).
+  //
+  // (1) THE CONSTRUCTION is INERT — `createEngineChangesFeed` opens no socket and reads nothing (the `createEngineRagStore`
+  //     discipline two lines up, `:825-830`), so it sits beside the two engine proxies (`:830`, `:839`) and AFTER the CRUD proxy
+  //     its `reconcile` closes over.
+  // (2) THE RE-READ is the FULL engine CRUD read (§2.4, `ASM-B4-3` — the callable is INJECTED, so the consumer holds no CRUD
+  //     surface of its own): every wiki, then EVERY PAGE of each wiki's documents, answered as ONE `structural` descriptor naming
+  //     the documents it saw. THE PAGINATION IS NOT DECORATION — the CRUD list is PAGED (`DocumentList` carries `total`/`page`/
+  //     `pageSize`), so an unpaged read would reconcile the engine's default FIRST PAGE ONLY while claiming to have re-read the
+  //     store (this unit's adversarial finding `F-4`, measured). The walk is BOUNDED (`RECONCILE_MAX_PAGES`), so a lying `total`
+  //     cannot hold a re-read open for ever, and `c9(h)` pins both the page size and the bound. A re-read that fails — or that
+  //     answers no four-key descriptor — is the FEED's to type: it settles `status()` and CLOSES the subscription it opened
+  //     (fail-closed; the socket is opened BEFORE the read under `ASM-B4-5`, so fail-closed means torn down, never never-opened).
+  // (3) THE SINK broadcasts on the EXISTING `IPC_RAG_STORE_CHANGED` channel — no new channel constant, no `preload.ts` byte, no
+  //     `shared/types.ts` widening — and the descriptor carries `ENGINE_ORIGIN_STORE` (`'gnosis:engine'`), which
+  //     `RAG_STORE_NAME_PATTERN` can never mint, so the renderer's fail-closed foreign-store guard drops it as a foreign store
+  //     until a pane DECLARES engine-change interest (that adoption is `B-6`/`B-8`'s, never this unit's).
+  //
+  // **WHERE `connect()` SITS, AND IT IS PART OF THE CLAIM (`F-2`, RULED BY `L1`): it is issued AFTER the window exists and AFTER
+  // its content has LOADED — the banner below `await win.loadFile(...)` — never here.** As first landed it was issued at THIS
+  // point, before `new BrowserWindow`, so the connection's announcement, its re-read descriptor and every frame of that connection
+  // were broadcast into no realm and DROPPED (`backend.broadcast` is a no-op with no attached window, `mcp-server.ts:2849-2857`) —
+  // a hidden loss, and nothing forced the early call: `B-2`'s pre-window hold exists because a creation delivery fires before any
+  // window, while here the caller chooses the moment. The renderer-ready signal is not awaitable from this file (the backend
+  // exposes no readiness promise, only the `IPC_READY` body at `:1326`), so the lawful post-window point available HERE is the
+  // load's completion. **What that does and does not prove:** the realm EXISTS and its content has loaded, so the descriptor is no
+  // longer dropped for want of a window — it does NOT establish that the renderer has already registered its
+  // `rag-store-changed` listener (that registration is `SidebarPanes.boot()`'s, several awaits into the renderer's own boot), and
+  // this unit does not claim it: the receipt is `B-6`/`B-8`'s byte. A pre-window QUEUE for this channel is still not this unit's
+  // byte and is not added.
+  const engineChangesFeed = createEngineChangesFeed({
+    baseUrl: resolveEngineBaseUrl(),
+    reconcile: async (): Promise<RagStoreChangedPayload> => {
+      const nodeIds: string[] = []
+      const wikis = await engineCrudRagStore.listWikis({})
+      for (const wiki of wikis) {
+        let seen = 0
+        for (let page = 1; page <= RECONCILE_MAX_PAGES; page += 1) {
+          const listed = await engineCrudRagStore.listDocuments({
+            wikiId: wiki.wikiId,
+            body: { state: null, tag: null, page, pageSize: RECONCILE_PAGE_SIZE },
+          })
+          for (const document of listed.items) nodeIds.push(document.documentId)
+          seen += listed.items.length
+          if (listed.items.length === 0 || seen >= listed.total) break
+        }
+      }
+      return { kind: 'structural', nodeIds, edgeIds: [], store: ENGINE_ORIGIN_STORE }
+    },
+    onChange: (descriptor: RagStoreChangedPayload) => backend.broadcast(IPC_RAG_STORE_CHANGED, descriptor),
+  })
+  app.once('before-quit', () => {
+    engineChangesFeed.close()
+  })
+
   const authorityStore = createAuthorityStore(loadAuthorityMapping())
   const idempotency = createIdempotencyRegistry({ maxEntries: 100 })
   const mcp = new ProvidentMcpServer({ backend, transport, port, gate, moduleStore, router: moduleRouter, ragStore: runtime.getDefaultStore(), retrievalEngine: runtime.getDefaultEngine(), templateStore, ragStores: runtime.getDirectory(), runtime, auditLog, engineRagStore, engineCrudRagStore, authorityStore, idempotency })
@@ -1301,6 +1368,15 @@ async function main(): Promise<void> {
 
   const rendererHtml = join(here, '..', 'renderer', 'index.html')
   await win.loadFile(rendererHtml)
+
+  // Unit `B-4` `engine-changes` §4 site (4) — **THE FEED CONNECTS HERE, AND ONLY HERE** (`F-2`, ruled by `L1`): the window exists
+  // (`new BrowserWindow` above, `backend.attachWindow` binds it) and its content has loaded, so the connection's announcement, the
+  // re-read's descriptor and every later frame of that connection land in a realm that can receive them. **NOT AWAITED** — an
+  // absent engine must never hold the boot (the `waitForReady`-is-not-awaited precedent, `:828-829`), and `connect()` never
+  // rejects (`c8`). The re-read now starts from the connection's own announcement, not from this call (`ASM-B4-5`), so the moment
+  // of this call costs nothing but the realm. What this site does NOT claim: that the renderer has already registered its
+  // `rag-store-changed` listener (`SidebarPanes.boot()`'s byte, `B-6`/`B-8`'s receipt).
+  void engineChangesFeed.connect()
 
   await mcp.start()
 
