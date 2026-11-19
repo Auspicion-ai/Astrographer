@@ -255,3 +255,12 @@ The adjacent `../Gnosis` build refuses this fork's query client on both routes: 
 query settles shape-equal, so its live paint cannot be distinguished from a no-op — the park `B-3` records
 rather than a claim it paints. Two asks: accept the client's envelope shape (or publish the expected
 `schemaVersion`), and state the SSE route's contract.
+
+---
+
+## 2026-11-19 — `B-6`'s hand-off status: NO package finding
+
+`B-6` `pane-doc-nav` touched no `node_modules` byte and found no package defect. Its one HIGH (`B6-F1`) is
+HOST-side — a missing store mirror for engine-originated writes — and is granted its own unit (`B-4a`) rather
+than handed off. Recorded explicitly so a future pass does not read the absence of a hand-off item as an
+oversight.

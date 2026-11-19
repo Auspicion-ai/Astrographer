@@ -910,3 +910,38 @@ exists. A token search is not a declaration search.
 `D-35`'s finding that "`edit.batch` is not registered" is DISCHARGED by `D-38` — kept as filed and read through
 this row. The census restatements the registration owed (four rows across four files) are paid, one of them by
 hardening a parser that had matched a token's MENTION rather than its DECLARATION.
+
+---
+
+## D-40 — `B-6` IS DRIVEN: a document created inside a DIRTY edit window moved the doc-nav, and the engine source's DATA PATH is granted its own unit
+
+**Status:** ACTIVE · **Date:** 2026-11-19 · **Source (measurement):** `B-6`'s return and
+`archive/live-runs/2026-11-19-b-6-pane-doc-nav-live.log`, re-read in this seat (its rows 12/12; the suite at
+its clean floor; `typecheck` 0; `build` 0; `drift` CLEAN with its pin arm equal)
+
+**What the reading decides:** a document created **while a page edit is DIRTY** moved the doc-nav's row set
+while `#wiki-root` and every sibling frame held — the queued re-derive **provably cannot produce that**
+(`F-5`), so this pane's paint is app-green and not inferred. `B-5`'s five limbs read true in the SAME run
+(`CONTROL_HELD`, `restored`), so `D-35` is unregressed, and the run proves the dirty-edit guard was HOLDING
+the rebuild, then released it, then restored. **The program's app proofs are now three:** `B-2`'s boot,
+`B-5`'s paint, `B-6`'s paint-under-a-held-rebuild.
+
+**`INV-E` grew a mutant the counters cannot see, and that is the unit's most useful finding:** `m6` collapses
+the two sources (the engine branch deleted) and reads **0/0/0 on all three counters, zero paints, zero
+re-reads, `publishChange` 0** — *the invariant perfectly held while the second source was silently dead.* The
+counters are necessary and not sufficient; `D2`/`D3` are the rows that see it. This restates `B-5`'s `m5`
+lesson at the level of SOURCES rather than paints.
+
+**The grant ruling `B6-F1` needs, taken here (HIGH):** the engine source is a **RECEIPT whose data path does
+not exist** — engine writes land in `engineRagStore`/`engineCrudRagStore` with **no mirror into the store that
+`IPC_RAG_DOC_HEADS` reads**, so an engine frame arrives and the pane answers `unchanged`. `src/main/**` is
+outside `B-6`'s grant, so **the mirror is GRANTED as its own unit (`B-4a` `engine-store-mirror`)**: it lands in
+`src/main/**`, it owns the one question the receipt cannot answer, and it must not widen `B-6`. Until it lands,
+the engine branch is a legal discriminator with no data behind it, and the unit's rows say so.
+
+**Two out-of-grant edits are COUNTERSIGNED**, recorded rather than smoothed: `tests/pd-ui-1-theme-register.test.ts`
+(a digest re-statement, `bd8a82cb…`) and `tests/unit-o-0-hook-contract.test.ts` (a `docHeads()` call-site census
+2 → 3). Both are consequences of the landing, both are exact-value re-statements, and neither weakens a claim.
+
+**One L0 commit is corrected:** my `c253820` said `B-6`'s live reading was "not claimed" — true of the state I
+sampled, false of the unit; the seat drove it afterwards. Kept as the record of a timing sample, not of a verdict.

@@ -250,3 +250,9 @@ trigger**: the measured dominant cost of the observed freezes is style/layout/pa
 legs are not the lever, and the track is neither re-opened nor re-litigated by this doc set.
 
 **PARKED, named:** `B-2a` `main-bundle-esm` — an ESM main bundle (measured working under a six-line `createRequire`/`__dirname` banner) is NO LONGER REQUIRED now that `provident-storeroom@1.12.0` answers `require`; it is parked as an OPTION under D-29/D-31, not a blocker, and would cost `package.json`'s `main`, the build format and six files if ever taken.
+
+**PARKED, named (D-40):** `B6-F1` HIGH — the engine source `B-6` wired is a RECEIPT whose DATA PATH does not
+exist: engine writes land in `engineRagStore`/`engineCrudRagStore` with no mirror into the store
+`IPC_RAG_DOC_HEADS` reads, so an engine frame arrives and the doc-nav answers `unchanged`. `src/main/**` is
+outside `B-6`'s grant, so **`B-4a` `engine-store-mirror` is GRANTED** to own it; until it lands, the engine
+branch is a legal discriminator with no data behind it, and the unit's rows say so.
