@@ -1204,3 +1204,24 @@ green, so the corpus's "nine" was eight.
 **What `B-10` proves about the program it closes:** the record family, its crossing, its delivery, its pre-window
 queue and its first real consumer all work end to end, **with the caret that had no caller now called from the
 app's own events and proven by the assembled app**.
+
+---
+
+## D-48 — The migration is MERGED to `main`: `main` IS the migration's head, and the post-merge readings are green
+
+**Status:** ACTIVE · **Date:** 2026-11-19 · **Source (measurement):** this seat's pre- and post-merge runs
+
+**Decision:** `post-division-rebuild` is merged into `main` as a **FAST-FORWARD** (`main` was a strict ancestor
+of the branch: 0 commits on the branch's side of the divide, 150 on the other). `main` now stands at
+**`ea8c37c`**, 331 commits total, and **156 ahead of `origin/main`**.
+
+**Readings, taken BEFORE the merge and re-taken AFTER it, identical both times:** `typecheck` 0 · `build` 0 ·
+the suite **203 files / 3,654 passed / 22 skipped / 4 failed — all four class (a) real-ollama gates**, classes
+(b)/(c)/(d) zero · `strata-lint` exit 0, 109 checks · `drift` CLEAN with its pin arm equal to `49d3137…`. The
+tree is clean at the merge and at the re-check.
+
+**What `main` now contains:** the whole program — the strata control corpus, `B-0`/`B-0b`'s pin, `B-1`'s record
+family, `B-2`'s crossing, `B-3`'s channel, `B-4`/`B-4a`'s engine path, `B-5`–`B-9`'s pane families,
+`edit.batch`'s registration, and `B-10`'s display state — with **six assembled-app proofs** and **zero
+re-assemblies left**. Nothing is pushed: the push is the user's call, and this row records that it is OWED rather
+than done.
