@@ -1191,12 +1191,10 @@ The limb now reads `(i') noReassemblyBeyondTheActivation` (exactly two root re-m
 says nothing** — `D-43`'s rule, applied by the unit to its own instruction.
 
 **THE `O-1` COUNTERSIGNATURE, GRANTED (D-33's precedent):** `src/main/store-channels.ts` (+`DISPLAY_WRITE`,
-census 4 → 5) and `src/main/preload.ts` (the ONE sender member `B-2` §4 reserved for this unit) were taken
-outside the delegated scope, with **no in-grant alternative measured** (`DISPLAY_READ` is arity-0,
-`STORE_FILE_PUT` writes a different carrier, `operatorSettings.set` is the layout carrier). Its price — **eight
-class-(b) literal re-statements** — is PAID here: the two channel censuses move to five names, and the preload
-digest is re-recorded `b13c3189 → 17c1d8cb` with the superseded value kept visible. `P-SPA-IM-3` was already
-green, so the corpus's "nine" was eight.
+census 4 → 5) and `src/main/preload.ts` (the ONE sender member `B-2` §4 reserved) were taken outside the
+delegated scope, with **no in-grant alternative measured**. Its price — **eight class-(b) re-statements** — is
+PAID: the two channel censuses move to five names, and the preload digest is re-recorded `b13c3189 → 17c1d8cb`
+with the superseded value visible. `P-SPA-IM-3` was already green, so the corpus's "nine" was eight.
 
 **`O-4` FILED, NOT CLAIMED:** the map's demand to give `caretNodes` its writer **or delete it** is neither —
 `sidebar-panes.ts` is out of grant — so it is a defect row with its owner rather than a silent third state.
