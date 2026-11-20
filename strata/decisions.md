@@ -1177,9 +1177,9 @@ move, `tab-switch`, `scroll-settle`), with the caret's authority being a **mirro
 `restoreCaret(<outgoing tab>)` *deletes* that tab's slot at exactly the tab-switch capture (measured).
 
 **THE LIVE READING IS THE ONE D-23 WAS WRITTEN FOR, and it FAILED first:** the pre-fix run recorded
-`recordEntry={"documentId":…}` with `recordEntryHasCaret=false recordEntryHasView=false`,
-`caretRestored=false`, `scrollRestored=false` — the record carried **no position at all**, and the cause was
-exact (`B10-EX-01`: the capture composed entries from the report, never the controller's slot). Post-fix:
+`recordEntry={"documentId":…}` with `recordEntryHasCaret=false recordEntryHasView=false`, `caretRestored=false`,
+`scrollRestored=false` — the record carried **no position at all** (`B10-EX-01`: the capture composed entries
+from the report, never the controller's slot). Post-fix:
 `{"caret":{"anchor":{"offset":41,…},"focused":true,…},"documentId":…,"view":{"offset":12201,"section":
 "page-edit-surface"}}` — **`caretRestored=true`, `scrollRestored=true` (`12201 → 12201`)**, with
 `exactlyOneSurface=true` and `U-EDIT-1-LIVE-7=PASS`.
@@ -1202,8 +1202,7 @@ green, so the corpus's "nine" was eight.
 `sidebar-panes.ts` is out of grant — so it is a defect row with its owner rather than a silent third state.
 
 **What `B-10` proves about the program it closes:** the record family, its crossing, its delivery, its pre-window
-queue and its first real consumer all work end to end, **with the caret that had no caller now called from the
-app's own events and proven by the assembled app**.
+queue and its first real consumer all work end to end, **with the caret proven by the assembled app**.
 
 ---
 
