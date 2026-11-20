@@ -91,7 +91,8 @@ const SELF_PATH = join(HERE, 'pd-store-persist-adopt.test.ts')
  *  constants still number exactly TWO (the `Y-3` push still rides the existing `webContents.send`
  *  surface and needs no constant of its own — `constantsCensusProblems` below is unchanged), and the
  *  single-source rule now covers all FOUR literals, which is the SAME rule over a wider subject. */
-const CHANNEL_EXPORT_NAMES = ['STORE_FILE_GET', 'STORE_FILE_PUT', 'DISPLAY_READ', 'DISPLAY_CHANGED'] as const
+// ⟨RE-STATED 2026-11-19 by unit `B-10` `stage-display-state` — the record's WRITE channel lands here: the census moves FOUR → FIVE (`DISPLAY_WRITE`, the ONE sender member `B-2` §4 reserved for this unit). The claim is UNMOVED; the set is widened by exactly what the change added.⟩
+const CHANNEL_EXPORT_NAMES = ['STORE_FILE_GET', 'STORE_FILE_PUT', 'DISPLAY_READ', 'DISPLAY_CHANGED', 'DISPLAY_WRITE'] as const
 /** §2.1 — the four declared values, single-sourced in member 1 (the `B-2` pair added 2026-11-18; the
  *  two store-channel values are the as-filed ones, unmoved). */
 const CHANNEL_VALUES: ReadonlyArray<[string, string]> = [

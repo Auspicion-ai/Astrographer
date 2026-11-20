@@ -1129,18 +1129,17 @@ unavailable. Recorded so the next pass does not spend a run rediscovering it.
 **Status:** ACTIVE · **Date:** 2026-11-19 · **Source (measurement):** `B-9`'s return and this seat's re-runs
 (rows 14/14 with `O7` un-skipped; the suite at its clean floor; `typecheck` 0; `build` 0; `drift` CLEAN)
 
-**The last re-assembly is GONE.** `renderer.ts`'s `firePaneUpdate`'s `⟨B-9⟩` branch —
+**The last re-assembly is GONE.** `renderer.ts`'s `⟨B-9⟩` branch —
 `if (registry.get(paneId)?.scope === 'operator' && host) void host.refresh()` — is now `paneEvents.fire(paneId)`
-and nothing else; and `onOperatorSettingsChanged`'s unconditional `requestRebuild('operator')` is deleted. The
-operator surface's paint is its **RETAINED graph re-rendered through its own adapter** (`renderOperator()`), so
-`INV-E` reads `0 loadAppGraph / 0 mountOperator / 0 refresh()` for **EVERY pane family in the app**.
+and nothing else, and `onOperatorSettingsChanged`'s unconditional `requestRebuild('operator')` is deleted. The
+operator surface's paint is its **RETAINED graph re-rendered through its own adapter**, so `INV-E` reads
+`0 loadAppGraph / 0 mountOperator / 0 refresh()` for **EVERY pane family in the app**.
 
 **AND MY DELEGATION'S CLAIM WAS FALSE, measured:** I wrote that `gnosis-status` under `⟨B-9⟩` reads
-`0 loadAppGraph / 1 mountOperator / 0 refresh()`. The unit RUN it: `refresh=1 loadAppGraph=1 mountOperator=1
-updatePane=0`, `fire={fired:false, handlers:0}` — **the whole re-assembly ran, and the fire never happened.**
-A `settings` settle read the same `1/1/1`, fired nothing, and its rebuild's own `operatorSettings.get()`
-**clobbered the push that triggered it** (`topK: 12` rendered `5`). The claim came from a neighbouring unit's
-note and I repeated it as fact; the unit measured it instead.
+`0 loadAppGraph / 1 mountOperator / 0 refresh()`. The unit RUN it: `refresh=1 loadAppGraph=1 mountOperator=1`,
+`fire={fired:false, handlers:0}` — **the whole re-assembly ran and the fire never happened**; a `settings` settle
+read the same `1/1/1` and its rebuild's own `operatorSettings.get()` **clobbered the push that triggered it**
+(`topK: 12` rendered `5`). The claim came from a neighbouring unit's note and I repeated it as fact.
 
 **The adversarial pass found the FIELD CENSUS wrong in three ways, one HIGH:** two of its five members never
 entered the assembled envelope and one never reached the registry, so **every `TabStrip.commit` re-assembled the
@@ -1157,9 +1156,51 @@ dodged.
 changed**, so a CLEARED shared field reaches the SIBLING pane that renders the H-2 indicator. `O7` is un-skipped
 and green; its message had named the exact fix, so the grant was a one-line act, not a design question.
 
-**Countersigned:** the `sidebar-panes` digest chain (final `3bac76d4e53ebf9f7723630704bb8081`). And
-`shell-chrome`'s `N` **37 → 39** under D-41's definition (two new export declarations), cap 440.
+**Countersigned:** the `sidebar-panes` digest chain (final `3bac76d4…`) and `shell-chrome`'s `N` **37 → 39**
+(two new exports, cap 440) under D-41's definition.
 
-**CARRIED:** `ADJ 2` — the routed leg cannot move the registry, so a non-echo `enabledOperatorPanes` push
-re-authors the OLD section set. Not a regression (both pre-`B-9` routes also re-mounted, plus a `loadAppGraph`
-this removes), **no row can see it**, and closing it needs a THIRD registry writer — a design act, not a line.
+**CARRIED:** `ADJ 2` — a non-echo `enabledOperatorPanes` push re-authors the OLD section set; not a regression,
+**no row can see it**, and closing it needs a THIRD registry writer — a design act, not a line.
+
+---
+
+## D-47 — `B-10` LANDS: the record has its FIRST REAL CONSUMER, and the caret that never had a caller now has one
+
+**Status:** ACTIVE · **Date:** 2026-11-19 · **Source (measurement):** `B-10`'s return and this seat's re-runs (the
+suite at its clean floor after eight re-statements; `typecheck` 0; `build` 0; `drift` CLEAN)
+
+**THE PROGRAM'S LAST UNIT, AND ITS FINDING WAS THE PROGRAM'S OLDEST DEBT:** `saveCaret` **had no production
+caller** — the record's capture side was never wired, so `B-1`'s family and `B-2`'s crossing had never carried a
+caret. `edit-controller.ts` took **zero byte**: the seam was complete, the CALLER was missing. It now lives in
+`renderer.ts`'s marked region, driven by the app's own events on the pinned cadence (`commit-on-blur`, the caret
+move, `tab-switch`, `scroll-settle`), with the caret's authority being a **mirror of the slot** because
+`restoreCaret(<outgoing tab>)` *deletes* that tab's slot at exactly the tab-switch capture (measured).
+
+**THE LIVE READING IS THE ONE D-23 WAS WRITTEN FOR, and it FAILED first:** the pre-fix run recorded
+`recordEntry={"documentId":…}` with `recordEntryHasCaret=false recordEntryHasView=false`,
+`caretRestored=false`, `scrollRestored=false` — the record carried **no position at all**, and the cause was
+exact (`B10-EX-01`: the capture composed entries from the report, never the controller's slot). Post-fix:
+`{"caret":{"anchor":{"offset":41,…},"focused":true,…},"documentId":…,"view":{"offset":12201,"section":
+"page-edit-surface"}}` — **`caretRestored=true`, `scrollRestored=true` (`12201 → 12201`)**, with
+`exactlyOneSurface=true` and `U-EDIT-1-LIVE-7=PASS`.
+
+**AND MY DELEGATION'S TERMS WERE UNSATISFIABLE, so the unit RE-GRAINED them rather than dropping them:** a
+document activation *is* `loadAppGraph`, so `(i) assemblyRootUnchanged` can never hold on a tab-switch round trip.
+The limb now reads `(i') noReassemblyBeyondTheActivation` (exactly two root re-mints for two activations, with
+`restoreMovesNothing=true`) and `(ii') paneSetAndDocumentAreTheTargets`. **A decisive row that cannot be satisfied
+says nothing** — `D-43`'s rule, applied by the unit to its own instruction.
+
+**THE `O-1` COUNTERSIGNATURE, GRANTED (D-33's precedent):** `src/main/store-channels.ts` (+`DISPLAY_WRITE`,
+census 4 → 5) and `src/main/preload.ts` (the ONE sender member `B-2` §4 reserved for this unit) were taken
+outside the delegated scope, with **no in-grant alternative measured** (`DISPLAY_READ` is arity-0,
+`STORE_FILE_PUT` writes a different carrier, `operatorSettings.set` is the layout carrier). Its price — **eight
+class-(b) literal re-statements** — is PAID here: the two channel censuses move to five names, and the preload
+digest is re-recorded `b13c3189 → 17c1d8cb` with the superseded value kept visible. `P-SPA-IM-3` was already
+green, so the corpus's "nine" was eight.
+
+**`O-4` FILED, NOT CLAIMED:** the map's demand to give `caretNodes` its writer **or delete it** is neither —
+`sidebar-panes.ts` is out of grant — so it is a defect row with its owner rather than a silent third state.
+
+**What `B-10` proves about the program it closes:** the record family, its crossing, its delivery, its pre-window
+queue and its first real consumer all work end to end, **with the caret that had no caller now called from the
+app's own events and proven by the assembled app**.

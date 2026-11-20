@@ -34,6 +34,12 @@
 //   4. every absent arm — no port, no read route, no change route, a registration that threw — is a DECLARED `subscribed: false`
 //      with its OWN word and a total `release`, and never a throw. The four words are the contract's, one per fault, because a
 //      client that folded them would leave a caller unable to tell a wiring fault from a refusal.
+//   5. ⟨Unit `B-10` `stage-display-state` §5⟩ **AND THE SENDER IS THE FIFTH WORD, NOT A FIFTH READING.** `write(tabId, entry)`
+//      is one whole entry out on one transport call, and the record's own answer is handed back UNTOUCHED. It writes NOTHING it
+//      holds: the held shape moves only by the store's delivery → the payload-free push → the listener's re-read, so an
+//      optimistic local write would be a second authority for what the record says. A port with no sender answers
+//      `no-write-route` (declared, total), a transport that throws or rejects answers `null`, and the entry handed out is a COPY
+//      — the `fill()` copy law, applied on the way OUT as well as in.
 //
 // **AND TWO RULES ABOUT WHAT MAY CHANGE THE SHAPE** (`B1-ADV-04`, both MEASURED as faults):
 //   · **A FAILURE IS NOT AN ABSENCE.** `fill()` used to fold every failure into the absent reading and overwrite unconditionally, so
@@ -56,10 +62,36 @@ export type DisplayReading = DisplayFamilyValue
 export interface DisplayPortMember {
   readonly read?: () => Promise<DisplayReading | null> | DisplayReading | null
   readonly onChanged?: (handler: () => void) => unknown
+  /** ⟨Unit `B-10` `stage-display-state` §5⟩ **THE SENDER — POSITIONAL, because the ADDRESS and the WHOLE ENTRY are two facts
+   *  about one act.** The realm's transport answers the record's own `DisplayWriteAnswer` (or a promise of one); this client
+   *  judges nothing, so the member's answer is passed through untouched. **THE MEMBER READ IS CONTAINED**, exactly like the
+   *  other two: a throwing accessor is an ABSENT ROUTE (the fifth absent-arm word `no-write-route`), never an exception. */
+  readonly write?: (tabId: string, entry: DisplayEntry) => unknown
 }
 
 /** A client with no port at all is the `no-port` arm and not an error, so `null` is in this type's domain. */
 export type DisplayPort = DisplayPortMember | null
+
+/** ⟨`B-10` §5⟩ **THE WRITE ROUTE'S ANSWER, AND IT IS THE RECORD'S OWN SHAPE, MIRRORED — NEVER IMPORTED** (`ASM-B2-1`'s rule,
+ *  one realm up): `src/main/record-engine/record.ts`'s `DisplayWriteAnswer` is `{ok: true}` or
+ *  `{ok: false, reason, message, address}`, where `reason` is the family's own token, `message` its own sentence and `address`
+ *  the LEAF the write would have landed at (`null` where no address is nameable). A structural twin rather than an import: the
+ *  record's module takes the store and the family at run time, and this realm must not grow a main-process run-time edge to read
+ *  a type. Nothing here judges the answer — the preload's own twin is `Promise<unknown>` for the same reason. */
+export type DisplayWriteAnswer =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: string; readonly message: string; readonly address: readonly string[] | null }
+
+/** ⟨`B-10` §5⟩ **THE FIFTH ABSENT-ARM WORD** — and it is the SENDER's absence, not a read's: a port that reads and pushes but
+ *  cannot write leaves the capture with nowhere to land, and folding it into one of the four landed words would leave a caller
+ *  unable to tell a wiring fault from a refusal (the four words keep their meanings, unchanged). */
+const NO_WRITE_ROUTE = 'no-write-route'
+
+/** The sentence the fifth arm answers — the record's own refusal SHAPE with this client's own words, because a token without a
+ *  sentence is half a refusal and this arm never reached the record to borrow one. */
+const NO_WRITE_ROUTE_MESSAGE =
+  "this client's port states no write route, so the display record cannot be reached from this realm: the capture was not sent " +
+  '(the entry is unchanged and the held reading is untouched)'
 
 /** **THE SUBSCRIPTION'S ANSWER, AND THE TWO ARMS ARE ONE SHAPE**: `reason` is `null` exactly when `subscribed` is `true`, and a
  *  `release` is answered on EVERY arm — so a caller never guards before withdrawing. */
@@ -81,6 +113,18 @@ export interface DisplayClient {
   displayOf(tabId: string): DisplayEntry | null
   /** Register on the port's arity-zero change route; the body re-reads, replaces the shape and hands the caller that reading. */
   subscribe(handler: (reading: DisplayReading | null) => void): DisplaySubscription
+  /** ⟨`B-10` §5⟩ **THE ONE SENDER: ONE WHOLE ENTRY, ONE TRANSPORT CALL, AND THE RECORD'S OWN ANSWER PASSED THROUGH UNTOUCHED.**
+   *
+   *  **IT NEVER TOUCHES THE HELD READING.** The store's own delivery → `B-2`'s payload-free push → this client's listener's
+   *  re-read is the ONE route by which the held shape moves (`B-1`'s `fill`-wins rule, `B-3`'s copy pin): an optimistic local
+   *  write would be a second authority for what the record says, so this member changes nothing it holds and re-reads nothing.
+   *
+   *  **IT NEVER THROWS.** A port with no write route answers the fifth absent-arm word (`no-write-route`) in the record's own
+   *  refusal shape; a transport that throws or rejects answers `null` (the failed arm — "no answer arrived", the idiom
+   *  `fill()` applies to a failed read); a good port gets EXACTLY ONE call, carrying a COPY of the entry (see `structuralCopy`:
+   *  a caller that keeps a reference cannot mutate what left this realm, and the address is a string, so the pair the transport
+   *  receives is nobody's alias). An answer is returned VERBATIM — this client does not judge a write's verdict. */
+  write(tabId: string, entry: DisplayEntry): Promise<DisplayWriteAnswer | null>
 }
 
 /** A withdrawal that withdraws nothing — the absent arms' `release`, total by construction. */
@@ -218,6 +262,19 @@ export function createDisplayClient(port: DisplayPort): DisplayClient {
     }
   }
 
+  /** ⟨`B-10` §5⟩ The port's WRITE route, or `null` — contained exactly like `readRoute`/`changedRoute`: a throwing accessor is
+   *  an ABSENT route (the `no-write-route` arm), never an exception at a caller. It is the ONE place the member is looked for,
+   *  so `write` cannot disagree with itself about whether a sender exists. */
+  const writeRoute = (): ((tabId: string, entry: DisplayEntry) => unknown) | null => {
+    if (member === null) return null
+    try {
+      const route = member.write
+      return typeof route === 'function' ? (route as (tabId: string, entry: DisplayEntry) => unknown) : null
+    } catch {
+      return null
+    }
+  }
+
   /** ONE read of the port, contained and normalized. A read that throws, rejects or answers a non-reading is the FAILED arm and
    *  answers `null`; the call itself is made SYNCHRONOUSLY here, so a counting port sees the read at the instant it was asked for. */
   const readOnce = (): Promise<DisplayReading | null> => {
@@ -307,5 +364,39 @@ export function createDisplayClient(port: DisplayPort): DisplayClient {
     }
   }
 
-  return { fill, reading: (): DisplayReading | null => held, displayOf, subscribe }
+  /** ⟨`B-10` §5⟩ **ONE WHOLE ENTRY OUT, ONE TRANSPORT CALL, AND NOTHING HELD MOVES.** The docblock on the interface member is
+   *  the contract; the body's three decisions are these and each is a rule rather than a guard:
+   *   1. **THE ABSENT ROUTE IS THE FIFTH WORD**, declared and total — the record's own refusal SHAPE with this client's own
+   *      words and `address: null`, because no leaf is nameable where no route exists;
+   *   2. **WHAT GOES OUT IS A COPY** (`structuralCopy`, the SAME law `fill()` lands its answer by): the entry's members are
+   *      re-created and its arrays re-built, so a caller that keeps a reference cannot rewrite what the record was told;
+   *   3. **A FAILED WRITE ANSWERS `null`** — a transport that throws or rejects is the "no answer arrived" arm, exactly as a
+   *      failed read leaves the standing reading alone; **A WRITE NEVER TOUCHES `held`**, so no write can move the shape. */
+  const write = (tabId: string, entry: DisplayEntry): Promise<DisplayWriteAnswer | null> => {
+    const route = writeRoute()
+    if (route === null) {
+      return Promise.resolve<DisplayWriteAnswer>({ ok: false, reason: NO_WRITE_ROUTE, message: NO_WRITE_ROUTE_MESSAGE, address: null })
+    }
+    let outgoing: DisplayEntry
+    try {
+      outgoing = structuralCopy(entry, 0) as DisplayEntry
+    } catch {
+      // the copy is total by construction (every member read is contained); this arm exists so the member's own
+      // "never throws" sentence is true even if that ever changes, and it answers the failed arm rather than the alias.
+      return Promise.resolve(null)
+    }
+    let answer: unknown
+    try {
+      answer = route.call(member, tabId, outgoing)
+    } catch {
+      return Promise.resolve(null)
+    }
+    // THE RECORD'S OWN ANSWER, PASSED THROUGH UNTOUCHED — and a rejection is the failed arm, never a throw at the caller.
+    return Promise.resolve(answer).then(
+      (settled) => settled as DisplayWriteAnswer,
+      () => null,
+    )
+  }
+
+  return { fill, reading: (): DisplayReading | null => held, displayOf, subscribe, write }
 }

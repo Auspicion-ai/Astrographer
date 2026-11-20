@@ -9,15 +9,21 @@
 //         literal is prose, not a second channel), in its declaring module and nowhere else; `main.ts` and `preload.ts`
 //         reference the NAMES; `src/renderer/**` reaches neither module and spells neither literal. Plus §4's own
 //         consequence: `store-channels.ts`'s export-name census sentence amends **2 → 4** in the same edit (a claim
-//         about its own export set may not be left stale), and `src/shared/types.ts` GAINS NOTHING — carried as its own
-//         limb, because three flat rows pin that file's md5 (`pd-vendor-manifest` `P-SM-1(d)`, `pd-vendor-set` `P-SM-2`,
-//         `pd-ui-1-theme-register`), so the exclusion is a MEASUREMENT and not an omission.
-//   `(e)` §5(e) / §4's bridge member — `ProvidentBridge`'s top-level member set is `PRE_LANDING_MEMBERS` **plus
-//         exactly `display`**; the `display` member's declared set is exactly `{read, onChanged}`; no sender member;
-//         the member indent matches; `onChanged` answers its unsubscribe; and **`read`'s return type is the preload's
-//         own STRUCTURAL TWIN, `Promise<Record<string, unknown> | null>`** (§4's amendment), never an import from the
-//         renderer or from `src/main/record-engine/`. **Positive control: the SAME oracle driven over a forged
-//         interface — one forged GOOD block it must pass, and three forged offenders it must NAME.**
+//         about its own export set may not be left stale) — **and `B-10` §5 RE-STATES that census 4 → 5 in the same
+//         edit that adds `DISPLAY_WRITE`**, so this arm is re-grained to FIVE names (the same claim, one more name: each
+//         literal spelled once, in its declaring module and nowhere else) — and `src/shared/types.ts` GAINS NOTHING —
+//         carried as its own limb, because three flat rows pin that file's md5 (`pd-vendor-manifest` `P-SM-1(d)`,
+//         `pd-vendor-set` `P-SM-2`, `pd-ui-1-theme-register`), so the exclusion is a MEASUREMENT and not an omission.
+//   `(e)` §5(e) / §4's bridge member, **RE-GRAINED TO UNIT `B-10`'s SUCCESSOR CLAIM** (`docs/L1/unit-b-10-stage-display-state.md`
+//         §5) — `ProvidentBridge`'s top-level member set is `PRE_LANDING_MEMBERS` **plus exactly `display`**; the `display`
+//         member's declared set is exactly `{read, onChanged, write}`; **exactly ONE sender member, and it is `write`**
+//         (`B-2` §4's *"There is NO … sender member"* was the claim this row made WHILE the write route belonged to a later
+//         unit; §5 hands it over, so the claim becomes *one sender and it is `write`* rather than "no sender"); `write`'s ONE-LINE
+//         signature is the preload's structural twin (`payload: { tabId: string; entry: unknown }` → `Promise<unknown>`); the
+//         member indent matches; `onChanged` answers its unsubscribe; and **`read`'s return type is the preload's own
+//         STRUCTURAL TWIN, `Promise<Record<string, unknown> | null>`** (§4's amendment), never an import from the renderer or from
+//         `src/main/record-engine/`. **Positive control: the SAME oracle driven over a forged interface — one forged GOOD block it
+//         must pass, and three forged offenders it must NAME.**
 //   `(f)` §5(f) / §2's last paragraph — the census of `createProfileStore(` CALL sites under `src/**/*.ts` is exactly
 //         `['src/main/main.ts']` and the call is BOUND. **Positive control: the same oracle over forged sources — a
 //         second call site and an unbound call site are both answered by name.**
@@ -95,11 +101,17 @@ const TYPES_PATH = join(SRC, 'shared', 'types.ts')
 const READ_CHANNEL = { name: 'DISPLAY_READ', literal: 'provident:display:read', declaringModule: 'src/main/store-channels.ts' } as const
 /** §4: the push is a SIGNAL (`send`/`on`) and its constant is `store-channels.ts`'s — the F-8 single source. */
 const PUSH_CHANNEL = { name: 'DISPLAY_CHANGED', literal: 'provident:display:changed', declaringModule: 'src/main/store-channels.ts' } as const
-const CHANNEL_SPELLINGS = [READ_CHANNEL, PUSH_CHANNEL] as const
-/** §4's export-name census sentence, amended **2 → 4** in the same edit: the landed pair, plus BOTH of this unit's
- *  channel constants. The set is compared as a SET (order-insensitive), so a reordering is not a finding. */
+/** **RE-GRAINED BY UNIT `B-10` `stage-display-state` §5** (`docs/L1/unit-b-10-stage-display-state.md`, taken under §9 `O-1`): the
+ *  write is a REQUEST of its own and its constant lives in the SAME declaring module — one job per mechanism, and the literal is
+ *  spelled exactly once. The claim is the SAME claim for one more name (each literal spelled once, in its declaring module and
+ *  nowhere else), never a widened one. */
+const WRITE_CHANNEL = { name: 'DISPLAY_WRITE', literal: 'provident:display:write', declaringModule: 'src/main/store-channels.ts' } as const
+const CHANNEL_SPELLINGS = [READ_CHANNEL, PUSH_CHANNEL, WRITE_CHANNEL] as const
+/** §4's export-name census sentence, amended **2 → 4** in the same edit, and **RE-STATED 4 → 5 by `B-10` §5** in the same edit
+ *  that adds `DISPLAY_WRITE`: the landed pair, then both of `B-2`'s channel constants, then `B-10`'s one sender. The set is
+ *  compared as a SET (order-insensitive), so a reordering is not a finding. */
 const STORE_CHANNELS_LANDED = ['STORE_FILE_GET', 'STORE_FILE_PUT'] as const
-const STORE_CHANNELS_CENSUS = [...STORE_CHANNELS_LANDED, READ_CHANNEL.name, PUSH_CHANNEL.name] as const
+const STORE_CHANNELS_CENSUS = [...STORE_CHANNELS_LANDED, READ_CHANNEL.name, PUSH_CHANNEL.name, WRITE_CHANNEL.name] as const
 /** §4's exclusion, carried as a READING: `src/shared/types.ts` gains NOTHING. Its current digest is not re-spelled here
  *  — it is read off the table `tests/pd-ui-1-theme-register.test.ts` already pins, so a later pass that re-states that
  *  row moves this limb with it instead of leaving a stale literal behind. */
@@ -146,10 +158,17 @@ const PRE_LANDING_MEMBERS = [
   'installSidebar',
   'store',
 ] as const
-/** §4/§5(e): the `display` member's declared set is EXACTLY these two, and neither is a sender. */
-const DISPLAY_MEMBERS = ['onChanged', 'read'] as const
-/** §4: *"There is NO `commit`, `write`, `put` or `sender` member"* — the map's "a subscriber, NOT a sender". */
-const FORBIDDEN_SENDERS = ['commit', 'write', 'put', 'sender', 'send', 'set'] as const
+/** **§5(e), RE-GRAINED TO `B-10` §5's SUCCESSOR CLAIM**: the `display` member's declared set is EXACTLY these three —
+ *  `B-2`'s `{read, onChanged}` PLUS the ONE sender §5 hands this unit — and the set is NEVER widened to "at least". */
+const DISPLAY_MEMBERS = ['onChanged', 'read', 'write'] as const
+/** **THE SENDER IS `write` AND NOTHING ELSE** (`B-10` §5: *"no `put`/`commit` alias, no second sender"*). `write` left this
+ *  list in the same edit that made it lawful; a second spelling of the sender is the fault `FORBIDDEN_SENDERS` still names. */
+const FORBIDDEN_SENDERS = ['commit', 'put', 'sender', 'send', 'set', 'writeOnce'] as const
+/** **THE ONE SENDER, BY NAME** — `B-10` §5 pins this member and forbids a second. The census below reads it as a COUNT, so a
+ *  lawful `write` beside a forged alias reds on "exactly one sender", not only on the alias list. */
+const THE_SENDER = 'write' as const
+/** §5's pinned `write` declaration, normalised the same way as the other two signatures: ONE LINE, the preload's own twin. */
+const WRITE_SIGNATURE = 'write(payload: { tabId: string; entry: unknown }): Promise<unknown>'
 /** §4: `ProvidentBridge`'s members are TWO-SPACE top-level; the `display` member's own are FOUR-space. */
 const TOP_LEVEL_INDENT = 2
 const NESTED_INDENT = 4
@@ -419,7 +438,7 @@ describe('display-wire · arm (d) — the two channel constants, each spelled ON
     ).toEqual([])
   })
 
-  it('(d) · THE CENSUS IS EXACT AND THE CONSUMERS USE THE NAMES — `store-channels` exports its two landed names plus BOTH channel constants (2 → 4), `main.ts`/`preload.ts` reference both NAMES, `src/renderer/**` reaches neither module, and `src/shared/types.ts` gains NOTHING (§5(d), §4)', () => {
+  it('(d) · THE CENSUS IS EXACT AND THE CONSUMERS USE THE NAMES — `store-channels` exports its two landed names plus the THREE channel constants (RE-STATED 4 → 5 by `B-10` §5), `main.ts`/`preload.ts` reference the NAMES, `src/renderer/**` reaches neither module, and `src/shared/types.ts` gains NOTHING (§5(d), §4)', () => {
     const problems: string[] = []
 
     attempt(problems, 'd·export-set', () => {
@@ -435,7 +454,7 @@ describe('display-wire · arm (d) — the two channel constants, each spelled ON
       const spurious = declared.filter((name) => !expected.includes(name))
       if (missing.length > 0) {
         msgs.push(
-          `the module does not export [${missing.join(', ')}] — §4 amends its export-name census sentence 2 → 4 in the same edit (a claim about its own export set may not be left stale), so the set is exactly [${expected.join(', ')}]`,
+          `the module does not export [${missing.join(', ')}] — §4 amends its export-name census sentence 2 → 4 (a claim about its own export set may not be left stale) and \`B-10\` §5 RE-STATES it 4 → 5 in the same edit that adds \`${WRITE_CHANNEL.name}\`, so the set is exactly [${expected.join(', ')}]`,
         )
       }
       if (spurious.length > 0) {
@@ -602,7 +621,7 @@ function bridgeCensusProblems(body: string): string[] {
     // the block that follows it (which is how the `commit` control was first swallowed).
     if (members.includes('display')) {
       problems.push(
-        `\`display\` is a top-level member but its declaration line does not read as a ${TOP_LEVEL_INDENT}-space \`display: { … }\` — §4 pins an OBJECT body with exactly two members`,
+        `\`display\` is a top-level member but its declaration line does not read as a ${TOP_LEVEL_INDENT}-space \`display: { … }\` — §4/§5 pin an OBJECT body whose members are exactly {${DISPLAY_MEMBERS.join(', ')}}`,
       )
     }
   }
@@ -612,7 +631,7 @@ function bridgeCensusProblems(body: string): string[] {
     const inner = open < 0 ? null : bracedBlock(body, open)
     if (inner === null) {
       problems.push(
-        'the `display` member carries no balanced object body — §4 pins an OBJECT with exactly two members, not a function or an alias',
+        `the \`display\` member carries no balanced object body — §4/\`B-10\` §5 pin an OBJECT with exactly [${[...DISPLAY_MEMBERS].join(', ')}], not a function or an alias`,
       )
     } else {
       const declared = memberNames(inner, NESTED_INDENT)
@@ -623,11 +642,30 @@ function bridgeCensusProblems(body: string): string[] {
           `the \`display\` member declares [${declared.join(', ')}] — §4/§5(e) pin EXACTLY [${[...DISPLAY_MEMBERS].join(', ')}], so a missing or extra member is a different crossing`,
         )
       }
-      const senders = declared.filter((name) => (FORBIDDEN_SENDERS as readonly string[]).includes(name))
-      if (senders.length > 0) {
+      const aliases = declared.filter((name) => (FORBIDDEN_SENDERS as readonly string[]).includes(name))
+      if (aliases.length > 0) {
         problems.push(
-          `the \`display\` member declares sender(s) [${senders.join(', ')}] — §4: *"There is NO \`commit\`, \`write\`, \`put\` or \`sender\` member"*; the write route is \`B-10\`'s and this key is a subscriber on one side and a read on the other`,
+          `the \`display\` member declares sender ALIAS(es) [${aliases.join(', ')}] — \`B-10\` §5 hands this crossing exactly ONE sender member, \`${THE_SENDER}\`, and adds no \`put\`/\`commit\` alias and no second sender (one mechanism, one job: the write route is a REQUEST, and this key is a subscriber on one side, a read and a sender on the other)`,
         )
+      }
+      // **THE SUCCESSOR CLAIM, READ AS A COUNT**: exactly ONE sender member, and it is `write`. `B-2`'s row said "no sender";
+      // §5 hands this unit the sender, so the row says "exactly one, and it is `write`" — a set that gained a second writer
+      // anywhere reds here even when every name in it is spelled lawfully.
+      const senders = declared.filter((name) => (DISPLAY_MEMBERS as readonly string[]).includes(name) && name !== 'read' && name !== 'onChanged')
+      if (senders.length !== 1 || senders[0] !== THE_SENDER) {
+        problems.push(
+          `the \`display\` member carries [${senders.join(', ') || 'no'}] sender member(s) where \`B-10\` §5 pins EXACTLY ONE and it is \`${THE_SENDER}\` — the successor of \`B-2\`'s "There is NO sender member" row, and a row that drifted back to zero senders would leave the capture with no write route at all`,
+        )
+      }
+      // AND THE SENDER'S OWN SIGNATURE: ONE line, the preload's structural twin (never an import, `ASM-B2-1` unchanged).
+      const writeLine = memberLine(inner, THE_SENDER)
+      if (writeLine !== null) {
+        const normalisedWrite = normaliseSignature(writeLine)
+        if (normalisedWrite !== WRITE_SIGNATURE) {
+          problems.push(
+            `\`${THE_SENDER}\` reads ${show(normalisedWrite)}; \`B-10\` §5 pins ${show(WRITE_SIGNATURE)} — declared on ONE LINE as the preload's own STRUCTURAL TWIN of the record's \`DisplayWriteAnswer\` (\`ASM-B2-1\`'s rule, unchanged: a \`Record<string, unknown>\`-shaped answer, never an import)`,
+          )
+        }
       }
       const line = memberLine(body, 'display')
       if (line !== null && !new RegExp(`^ {${TOP_LEVEL_INDENT}}display\\s*:`).test(line)) {
@@ -699,7 +737,7 @@ function blockWithoutMember(body: string, name: string): string | null {
 }
 
 describe('display-wire · arm (e) — the bridge census is EXACT (§5(e), §4)', () => {
-  it('(e) · `ProvidentBridge` = its LANDED member list PLUS exactly `display`, whose own set is exactly {read, onChanged} and no sender (§5(e))', () => {
+  it('(e) · `ProvidentBridge` = its LANDED member list PLUS exactly `display`, whose own set is exactly {read, onChanged, write} with EXACTLY ONE sender and it is `write` (§5(e), re-grained to `B-10` §5)', () => {
     const problems: string[] = []
     const raw = readPath(PRELOAD_PATH)
     const code = codeOnly(raw)
@@ -804,6 +842,8 @@ describe('display-wire · arm (e) — the bridge census is EXACT (§5(e), §4)',
       `${' '.repeat(TOP_LEVEL_INDENT)}display: {`,
       `${' '.repeat(NESTED_INDENT)}read(): Promise<Record<string, unknown> | null>`,
       `${' '.repeat(NESTED_INDENT)}onChanged(handler: () => void): () => void`,
+      // RE-GRAINED: the forged GOOD block carries `B-10` §5's ONE sender, or the control would red a correct implementation.
+      `${' '.repeat(NESTED_INDENT)}${WRITE_SIGNATURE}`,
       `${' '.repeat(TOP_LEVEL_INDENT)}}`,
     ].join('\n')
     const forgedGood = `${base}\n${forgedDisplay}\n`
@@ -823,6 +863,7 @@ describe('display-wire · arm (e) — the bridge census is EXACT (§5(e), §4)',
         `${' '.repeat(TOP_LEVEL_INDENT)}display: {`,
         `${' '.repeat(NESTED_INDENT)}read(): Promise<DisplayReading | null>`,
         `${' '.repeat(NESTED_INDENT)}onChanged(handler: () => void): () => void`,
+        `${' '.repeat(NESTED_INDENT)}${WRITE_SIGNATURE}`,
         `${' '.repeat(TOP_LEVEL_INDENT)}}`,
       ].join('\n')}\n`
       const found = bridgeCensusProblems(forged)
@@ -851,14 +892,16 @@ describe('display-wire · arm (e) — the bridge census is EXACT (§5(e), §4)',
         `${' '.repeat(TOP_LEVEL_INDENT)}display: {`,
         `${' '.repeat(NESTED_INDENT)}read(): Promise<Record<string, unknown> | null>`,
         `${' '.repeat(NESTED_INDENT)}onChanged(handler: () => void): () => void`,
+        // THE LAWFUL SENDER, so the forgery's OWN offender is the alias and not a missing `write`.
+        `${' '.repeat(NESTED_INDENT)}${WRITE_SIGNATURE}`,
         `${' '.repeat(NESTED_INDENT)}commit(entry: unknown): void`,
         `${' '.repeat(TOP_LEVEL_INDENT)}}`,
       ].join('\n')}\n`
       const found = bridgeCensusProblems(forged)
       if (found.length === 0) {
-        return 'CONTROL FAILED: a forged `display.commit` SENDER passed the census silently — §4 forbids a sender member, and this oracle must name it'
+        return 'CONTROL FAILED: a forged `display.commit` SECOND SENDER passed the census silently — `B-10` §5 pins exactly ONE sender member and it is `write`, so this oracle must name the alias'
       }
-      return /\bcommit\b/.test(found.join(' ')) ? null : `CONTROL FAILED: the census reported [${found.join('; ')}] without naming the forged sender \`commit\``
+      return /\bcommit\b/.test(found.join(' ')) ? null : `CONTROL FAILED: the census reported [${found.join('; ')}] without naming the forged second sender \`commit\``
     })
 
     expect(

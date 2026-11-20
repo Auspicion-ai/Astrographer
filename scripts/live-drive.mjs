@@ -2460,6 +2460,147 @@ async function ufB7PaneFrameCensus(h, opts = {}) {
   return census
 }
 
+/** ⟨Unit `B-10` §8 (`G8`) — **THE STAGE-DISPLAY CENSUS: ONE INSTANT, EVERY READING THE DISPLAY LIMB NEEDS.**⟩ The
+ *  same DOM/CDP idiom the `B-3`/`B-5`/`B-6`/`B-7`/`B-9` censuses established (ONE `cdp.evaluate`, a per-run own
+ *  property, the mark-then-read token rule), with an own property of its OWN — `__b10Mark` — so no landed unit's
+ *  mark aliases this one and no landed reading is disturbed by it. What it adds, and why each member is here:
+ *
+ *   · **THE CARET, IN THE RECORD'S OWN VOCABULARY** — `window.getSelection()`'s anchor and focus as a CHILD-INDEX
+ *     `path` + `offset` from the `#page-edit-surface` ROOT, plus `focused`, which is exactly the `DisplayCaret`
+ *     `src/renderer/runtime.ts`'s `stageDisplayCaretIn`/`stageDisplayPathFrom` settle at capture time (transcribed
+ *     here node-for-node, so the driver's reading and the app's capture cannot be two different caret languages).
+ *     The recording of an unavailable caret is `null` — the honest "no caret to state", never an invented edge.
+ *   · **THE STAGE'S SCROLL BOX** — `#app [id="zone:main"]` (`ASM-B10-2`; the authored id `zone:main` is the same
+ *     element), read as `scrollTop` PLUS its own geometry, so "the box took the recorded offset" is separable from
+ *     "the box cannot scroll at all" (`boxOverflows`), which is a driver-side precondition and never an app verdict.
+ *   · **THE ASSEMBLY ROOT** — `#wiki-root`'s `data-node-id` and its COUNT (the whole-graph re-load oracle the
+ *     `B-3`/`B-5` limbs use), and **every `.pane-frame[data-pane-id]`** with its per-run mark, its `data-node-id`
+ *     and its carriers, so "the other panes survived the round trip" is read at the same instant as the caret.
+ *   · **THE SURFACE CENSUS BY BOTH DISCRIMINATORS** (`#page-edit-surface` by authored id AND `[data-edit-surface]`),
+ *     plus the surface's OWN marker — the document the stage shows — which is how `(<v>) documentShown` is taken.
+ *   · **THE ACTIVE TAB'S IDENTITY** off the rendered strip (`data-tab-id`, `data-target-kind`,
+ *     `data-document-id`): the tab the record's entry is addressed BY (the address segment) and the TARGET whose
+ *     document the stage must show.
+ *
+ *  `mark: true` stamps every live frame with this call's per-run token (and records the census); `mark: false`
+ *  re-reads the SAME census with the token handed back and leaves the DOM alone — a mark can only be ABSENT from a
+ *  node that was REPLACED, which is the whole reading. READ-ONLY otherwise: no app state, no envelope, no handler,
+ *  no bridge read, no verdict — the block that owns the row reads these values. */
+async function ufB10StageDisplayCensus(h, opts = {}) {
+  const mark = opts.mark === true
+  const token = typeof opts.reuseToken === 'string' && opts.reuseToken !== ''
+    ? opts.reuseToken
+    : 'b10-display-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+  const expr = `(() => {
+    const TOKEN = ${JSON.stringify(token)}
+    const MARK = ${mark ? 'true' : 'false'}
+    const SURFACE_ID = 'page-edit-surface'
+    const surface = document.getElementById(SURFACE_ID)
+    const box = document.getElementById('zone:main')
+    const rootEl = document.getElementById('wiki-root')
+    const frames = [].slice.call(document.querySelectorAll('.pane-frame[data-pane-id]'))
+    if (MARK) { for (const el of frames) { try { el.__b10Mark = TOKEN } catch (e) { /* a frozen node cannot be marked */ } } }
+    const kidsOf = (n) => { try { const k = n && n.childNodes; return k !== null && k !== undefined && typeof k.length === 'number' ? k : null } catch (e) { return null } }
+    const pathFrom = (root, node) => {
+      if (root === null || root === undefined || node === null || node === undefined) return null
+      let cur = node
+      const path = []
+      let guard = 0
+      while (cur !== root) {
+        if (guard++ > 512) return null
+        if (cur === null || typeof cur !== 'object') return null
+        let parent = null
+        try { parent = cur.parentNode } catch (e) { return null }
+        const kids = kidsOf(parent)
+        if (kids === null) return null
+        let at = -1
+        for (let i = 0; i < kids.length; i += 1) { if (kids[i] === cur) { at = i; break } }
+        if (at < 0) return null
+        path.unshift(at)
+        cur = parent
+      }
+      return path
+    }
+    const edgeOf = (node, offset) => {
+      if (typeof offset !== 'number' || !Number.isInteger(offset) || offset < 0) return null
+      const path = pathFrom(surface, node)
+      return path === null ? null : { path: path, offset: offset }
+    }
+    const caretOf = () => {
+      if (surface === null || surface === undefined) return null
+      let sel = null
+      try { sel = window.getSelection() } catch (e) { return null }
+      if (sel === null || typeof sel !== 'object') return null
+      const anchor = edgeOf(sel.anchorNode, sel.anchorOffset)
+      const focus = edgeOf(sel.focusNode, sel.focusOffset)
+      if (anchor === null || focus === null) return null
+      return { kind: 'rich', anchor: anchor, focus: focus, focused: document.activeElement === surface }
+    }
+    const norm = (s) => String(s || '').replace(/\\s+/g, ' ').trim()
+    const attrOf = (el, attr) => (el ? el.getAttribute(attr) : null)
+    const active = document.querySelector('#tab-strip .tab.is-active')
+    const read = (el) => {
+      const head = el.querySelector('.pane-head')
+      const body = el.querySelector('.pane-body')
+      const grip = head ? head.children[0] : null
+      const control = head ? head.children[1] : null
+      const classes = String(el.className || '')
+      const zoneMatch = /\\bpane-in-([a-z]+)\\b/.exec(classes)
+      return {
+        zone: zoneMatch ? zoneMatch[1] : null,
+        id: el.getAttribute('id'),
+        headId: head ? head.getAttribute('id') : null,
+        gripId: grip ? grip.getAttribute('id') : null,
+        controlId: control ? control.getAttribute('id') : null,
+        bodyId: body ? body.getAttribute('id') : null,
+      }
+    }
+    return JSON.stringify({
+      token: TOKEN,
+      root: attrOf(rootEl, 'data-node-id'),
+      rootCount: document.querySelectorAll('#wiki-root').length,
+      surfaceCount: document.querySelectorAll('#' + SURFACE_ID).length,
+      markerCount: document.querySelectorAll('[data-edit-surface]').length,
+      surfacePresent: !!(surface !== null && surface !== undefined),
+      documentShown: surface ? surface.getAttribute('data-edit-surface') : null,
+      caret: caretOf(),
+      surfaceTextLen: surface ? String(surface.textContent || '').length : null,
+      boxPresent: !!(box !== null && box !== undefined),
+      scrollTop: box ? Math.round(box.scrollTop) : null,
+      scrollHeight: box ? box.scrollHeight : null,
+      clientHeight: box ? box.clientHeight : null,
+      boxOverflows: box ? box.scrollHeight > box.clientHeight + 1 : null,
+      activeTabId: attrOf(active, 'data-tab-id'),
+      activeTabKind: attrOf(active, 'data-target-kind'),
+      activeTabDocumentId: attrOf(active, 'data-document-id'),
+      tabCount: document.querySelectorAll('#tab-strip .tab').length,
+      openTabIds: [].slice.call(document.querySelectorAll('#tab-strip .tab')).map((t) => t.getAttribute('data-tab-id')),
+      frameCount: frames.length,
+      frames: frames.map((el) => {
+        const carries = (() => { try { return el.__b10Mark === TOKEN } catch (e) { return false } })()
+        return { pid: el.getAttribute('data-pane-id'), nodeId: el.getAttribute('data-node-id'), marked: carries, carriers: read(el) }
+      }),
+      paneText: (() => {
+        const m = document.getElementById('zone:main')
+        return m ? norm(m.textContent).length : null
+      })(),
+    })
+  })()`
+  const census = JSON.parse(await h.cdp.evaluate(expr))
+  const baseByPid = new Map((Array.isArray(opts.baseline) ? opts.baseline : []).map((f) => [f && f.pid, f]))
+  census.frameChecks = (census.frames || []).map((f) => {
+    const prior = baseByPid.get(f.pid) || null
+    return {
+      pid: f.pid,
+      nodeId: f.nodeId,
+      marked: f.marked === true,
+      nodeIdHeld: prior === null ? null : prior.nodeId === f.nodeId,
+      carriersHeld: prior === null ? null : JSON.stringify(prior.carriers) === JSON.stringify(f.carriers),
+    }
+  })
+  return census
+}
+
 /** ⟨Unit `B-9` §8 (`G8`) — **THE SETTINGS PANE'S OWN LIVE LIMB, MARKED THEN READ.**⟩ The same
  *  DOM/CDP idiom as the `B-3`/`B-5`/`B-6`/`B-7` frame censuses (ONE `cdp.evaluate`, a per-run own
  *  property, the mark-then-read token rule), extended to the ONE surface none of them reaches: the
@@ -10776,6 +10917,556 @@ const BLOCKS = {
     const tplVisAfter = await ufPaneVisibilityState(h, tplPaneId)
     const tplPaneDisabled = tplVisBefore === 'true' && tplVisAfter === 'false'
     const tplRestoreOk = tplDeleteFailure === null && tplZoneGone && tplPaneDisabled
+    // =========================================================================
+    // ⟨Unit `B-10` §8 (`G8`) — **THE STAGE-DISPLAY LIMB: `D-23`'S RECORD GETS ITS FIRST WRITER, AND THIS LEG READS
+    // IT IN THE ASSEMBLED APP.**⟩ THE FOURTH LIMB IN THIS BLOCK, and the block is its host by the contract's own
+    // rule (§8: it already opens a document, places a real caret and types real input). **NO NEW `BLOCKS` KEY**: the
+    // key census is FROZEN with a digest (`tests/live-drive-contract.test.ts`, a `tests/**` file outside this unit's
+    // write scope), so a new key would buy a class-(b) re-statement — the limb lives INSIDE this block and prints
+    // its own labelled lines, so a partial reading is visible instead of collapsed into one boolean.
+    //
+    // WHAT IS DRIVEN, in the fork's own terms (§8): open a document (the app's own import + document-tab seams), place
+    // a REAL caret in `#page-edit-surface`, type REAL text, REALLY scroll the stage's own box
+    // (`#app [id="zone:main"]`, `ASM-B10-2`), switch to a SECOND tab and back with a REAL click, and then read the
+    // caret and the scroll against the record's OWN BYTES in `<userData>/provident-profile.json` — the record's
+    // state, never the app's intent — beside the four assembly limbs and the document the stage shows.
+    //
+    // THE CONTROL, in the SAME run: the record's entry for that tab is FORGED — its `documentId` rewritten to a
+    // DIFFERENT document, through the app's OWN write route (`window.provident.display.write` -> `DISPLAY_WRITE` ->
+    // `record.commitTab`), carrying a caret and a view the restore must NOT apply — and the same round trip must read
+    // NO caret, `scrollTop === 0`, and the tab's TARGET document still shown: the stamp-mismatch DROP at app grain
+    // (§3: the target decides which document is shown; the stamp only IDENTIFIES it).
+    //
+    // THE LAYER OF EVERY READING BELOW IS THE ASSEMBLED APP (`RCA-12`): `G8`, the only app-green layer. The two
+    // things this limb can NEVER earn (also `§8`): the `INV-E` counters and the WRITE COUNT — both are §7's, and the
+    // profile's bytes show the last STATE, never the number of writes.
+    // =========================================================================
+    const b10 = { parkReason: null, failReason: null, ok: false, lines: [], evidence: '' }
+    const b10Print = (text) => {
+      b10.lines.push(text)
+      console.log(`[live-drive] B10-LIMB ${text}`)
+    }
+    /** THE CARET'S CANONICAL KEY — the two edges' VALUES (path + offset per edge), never the member ORDER: the
+     *  record's caret is written by the store and the DOM's reading is built here, so the comparison must be over
+     *  values (`focused` is printed beside it as its own reading, never folded into the position). */
+    const b10CaretKey = (caret) => (caret !== null && typeof caret === 'object' && caret.anchor !== null && typeof caret.anchor === 'object' &&
+      caret.focus !== null && typeof caret.focus === 'object' && Array.isArray(caret.anchor.path) && Array.isArray(caret.focus.path)
+      ? JSON.stringify([caret.anchor.path, caret.anchor.offset, caret.focus.path, caret.focus.offset])
+      : null)
+    /** **THE CARET'S CHARACTER-IDENTITY READING — the shape `(7a)` and `(8)` grade, and the RE-GRAIN of "the caret was
+     *  restored".** MEASURED on the first DRIVEN run: the old reading compared the DOM's child-index PATH with the record's
+     *  (`path:[0]` at the switching instant vs `path:[0,0]` after the return, the SAME offset 41 and the same `focused:true`),
+     *  and a path is resolved against the DOM THAT IS THERE — a re-authored stage nests the surface's first child one level
+     *  deeper, so path equality cannot separate "the caret landed on the record's character" from "the caret was never applied".
+     *  The claim that CAN separate them, and is STRONGER: **the record's OWN path, re-resolved against the CURRENT surface,
+     *  names the same TEXT NODE the live selection sits on, at the record's own offsets** — character identity plus offset, not
+     *  a structural index. (An element-container selection is normalized to its first text node, the same law
+     *  `runtime.ts`'s `stageDisplayCaretIn`/`renderer.ts`'s `stageDisplayResolvePath` apply, so the three readings cannot
+     *  disagree about what "the same character" means.) */
+    const b10CaretAtPathInDom = async (recordCaret) => {
+      if (recordCaret === null || typeof recordCaret !== 'object') return { available: false, why: 'no record caret' }
+      const anchorPath = recordCaret.anchor && Array.isArray(recordCaret.anchor.path) ? recordCaret.anchor.path : null
+      const focusPath = recordCaret.focus && Array.isArray(recordCaret.focus.path) ? recordCaret.focus.path : null
+      if (anchorPath === null || focusPath === null) return { available: false, why: 'the record caret states no path pair' }
+      return await h.cdp.evaluate(`(() => {
+        const surface = document.getElementById('page-edit-surface')
+        if (surface === null || surface === undefined) return { available: false, why: 'no #page-edit-surface' }
+        const kidsOf = (n) => (n !== null && n !== undefined && n.childNodes !== null && n.childNodes !== undefined && typeof n.childNodes.length === 'number' ? n.childNodes : null)
+        const firstText = (n) => {
+          if (n === null || n === undefined) return null
+          if (n.nodeType === 3) return n
+          const k = kidsOf(n)
+          if (k === null) return null
+          for (let i = 0; i < k.length; i += 1) { const f = firstText(k[i]); if (f !== null) return f }
+          return null
+        }
+        const normNode = (n) => (n !== null && n !== undefined && n.nodeType === 3 ? n : firstText(n))
+        const resolve = (p) => {
+          let cur = surface
+          for (let i = 0; i < p.length; i += 1) {
+            const k = kidsOf(cur)
+            const step = p[i]
+            if (k === null || typeof step !== 'number' || step < 0 || step >= k.length) return null
+            cur = k[step]
+          }
+          return normNode(cur)
+        }
+        const caret = ${JSON.stringify(recordCaret)}
+        const a = resolve(caret.anchor.path)
+        const f = resolve(caret.focus.path)
+        let sel = null
+        try { sel = window.getSelection() } catch (e) { sel = null }
+        if (sel === null || typeof sel !== 'object') return { available: false, why: 'no selection' }
+        const selA = normNode(sel.anchorNode)
+        const selF = normNode(sel.focusNode)
+        const anchorSameCharacter = a !== null && selA === a
+        const focusSameCharacter = f !== null && selF === f
+        return {
+          available: true,
+          resolvedAnchorText: a === null ? null : String(a.data || '').slice(0, 80),
+          selectionAnchorText: selA === null ? null : String(selA.data || '').slice(0, 80),
+          anchorSameCharacter: anchorSameCharacter,
+          focusSameCharacter: focusSameCharacter,
+          anchorOffsetMatches: sel.anchorOffset === caret.anchor.offset,
+          focusOffsetMatches: sel.focusOffset === caret.focus.offset,
+          selectionAnchorIsText: !!(sel.anchorNode && sel.anchorNode.nodeType === 3),
+          selectionAnchorOffset: sel.anchorOffset,
+          recordAnchorOffset: caret.anchor.offset,
+          caretAtRecordPath: anchorSameCharacter && focusSameCharacter && sel.anchorOffset === caret.anchor.offset && sel.focusOffset === caret.focus.offset,
+        }
+      })()`)
+    }
+    // THE LIMB'S OWN STATE IS DECLARED OUTSIDE THE GUARD: the row's `evidence`/`extra` read these AFTER it, so a
+    // `const`/`let` inside the `try` would make the very reading it produced unreachable at the return — and a guard
+    // that swallows its own reading is exactly the silent skip this limb may not be.
+    let b10ProfilePath = null
+    let b10DocId = null
+    let b10FixturePath = null
+    let b10Before = null
+    let b10After = null
+    let b10TabId = null
+    let b10TargetDoc = null
+    let b10SecondDoc = null
+    let b10SecondTabId = null
+    let b10Entry = null
+    let b10AllowlistOk = null
+    let b10TypedAbsent = null
+    let b10CaretRestored = null
+    let b10ScrollRestored = null
+    let b10RootHeld = null
+    let b10OthersSurvived = null
+    // ⟨THE TWO RE-GRAINED CLAUSES ARE NOT `b10RootHeld`/`b10OthersSurvived` ANY MORE:⟩ those two names held the borrowed
+    // pane-PAINT terms (`assemblyRootUnchanged`, `otherPanesSurvived`), which a tab-switch round trip cannot satisfy — the
+    // switch re-authors the whole assembly. The successor readings are `b10RootRemints`/`b10RestoreMovesNothing` (`(i')`) and
+    // `b10PaneSetHeld` (`(ii')`), declared with the other holders below; the two old names are kept UNASSIGNED only so the
+    // row's `extra` block could not silently keep reading a stale claim — they are reported as `null` there and the successor
+    // names stand beside them.
+    let b10ExactlyOne = null
+    let b10DocShownIsTarget = null
+    let b10ControlHeld = null
+    let b10ControlCaret = null
+    let b10ControlScroll = null
+    let b10ControlDocShown = null
+    // ⟨THE RE-GRAINED CLAUSES' OWN READINGS (`(i')`/`(ii')`, declared HERE for the reason every holder above is: the row's
+    // `evidence`/`extra` read them AFTER the guard.⟩ `b10SecondCensus` is the census taken on the SECOND tab (the away
+    // activation's own reading), `b10AfterQuiet` a re-read taken after the return had settled with nothing driving the app (the
+    // "the restore itself moves nothing" sample), `b10RootRemints` the count of `#wiki-root` data-node-id CHANGES across the
+    // round trip, `b10PaneSetHeld` the pane-id set comparison and `b10RestoreMovesNothing` the quiet-window comparison.
+    let b10SecondCensus = null
+    let b10AfterQuiet = null
+    let b10RootRemints = null
+    let b10PaneSetHeld = null
+    let b10RestoreMovesNothing = null
+    let b10FixtureDir = null
+    // ⟨THE CARET'S CHARACTER-IDENTITY READING + THE TWO CONTROLS (fix round, see their docblocks).⟩ `b10CaretIdentity` is the
+    // re-grained caretRestored reading; `b10Admit*` are the ADMIT control's readings (a forged entry whose stamp MATCHES the tab's
+    // target must be APPLIED — the limb that proves the restore is live, so the mismatch DROP below is a drop and not a dead
+    // restore) and `b10Drop*` the mismatch control's.
+    let b10CaretIdentity = null
+    let b10AdmitWrite = null
+    let b10AdmitEntryOnDisk = null
+    let b10Admit = null
+    let b10AdmitHeld = null
+    let b10AdmitMoved = null
+    try {
+      // ── (0) THE RECORD'S CARRIER. `<userData>/provident-profile.json` is main's ONE store construction
+      // ── (`app.getPath('userData')`); this run's app booted with `HOME=<scratch>`, so the candidates are the
+      // ── Electron default under that HOME and the driver's own `--corpus-root` registry root. EVERY candidate is
+      // ── printed when none exists, so a wrong path is a NAMED driver state and never an app verdict.
+      const b10Candidates = []
+      if (typeof h.userDataDir === 'string' && h.userDataDir !== '') b10Candidates.push(join(h.userDataDir, 'provident-profile.json'))
+      const b10Xdg = typeof process.env.XDG_CONFIG_HOME === 'string' ? process.env.XDG_CONFIG_HOME : ''
+      if (b10Xdg !== '') b10Candidates.push(join(b10Xdg, 'provident-electron', 'provident-profile.json'))
+      if (typeof h.homeDir === 'string' && h.homeDir !== '') {
+        for (const sub of ['provident-electron', 'Astrographer', 'astrographer']) b10Candidates.push(join(h.homeDir, '.config', sub, 'provident-profile.json'))
+      }
+      const b10Unique = [...new Set(b10Candidates)]
+      const b10Existing = b10Unique.filter((p) => { try { return statSync(p).isFile() } catch { return false } })
+      b10ProfilePath = b10Existing.length > 0 ? b10Existing[0] : (b10Unique.length > 0 ? b10Unique[0] : null)
+      const b10ReadRecord = () => {
+        const out = { path: b10ProfilePath, present: false, bytes: '', family: null, familyKeys: null, parsed: null, parseError: null }
+        if (b10ProfilePath === null) return out
+        try { out.bytes = readFileSync(b10ProfilePath, 'utf8'); out.present = true } catch (e) { out.readError = String(e && e.message ? e.message : e); return out }
+        try { out.parsed = JSON.parse(out.bytes) } catch (e) { out.parseError = String(e && e.message ? e.message : e) }
+        const shape = out.parsed
+        if (shape !== null && typeof shape === 'object') {
+          if (shape.display !== null && typeof shape.display === 'object') out.family = shape.display
+          else if (shape.value !== null && typeof shape.value === 'object' && shape.value.display !== null && typeof shape.value.display === 'object') out.family = shape.value.display
+        }
+        out.familyKeys = out.family === null ? null : Object.keys(out.family)
+        return out
+      }
+      const b10Carrier = b10ReadRecord()
+      b10Print(`(0) RECORD'S CARRIER: path=${JSON.stringify(b10ProfilePath)} candidates=${JSON.stringify(b10Unique)} filePresent=${b10Carrier.present} bytes=${b10Carrier.bytes.length} parseError=${JSON.stringify(b10Carrier.parseError ?? null)} displayFamily=${b10Carrier.family === null ? 'absent' : JSON.stringify(b10Carrier.familyKeys)} (THE RECORD'S OWN BYTES, read off disk — never the app's intent)`)
+      if (b10ProfilePath === null || !b10Carrier.present) {
+        b10.parkReason = `PRECONDITION-FAILED: the display record's carrier was NOT FOUND at any candidate (${JSON.stringify(b10Unique)}; homeDir=${JSON.stringify(h.homeDir ?? null)}, userDataDir=${JSON.stringify(h.userDataDir ?? null)}) — a DRIVER-side path state, so the limb is NOT-DRIVEN and no app reading is claimed`
+        b10Print(`NOT-DRIVEN ${b10.parkReason}`)
+      }
+      // ── (1) THE DOCUMENT AND ITS OWN TAB, through the app's OWN seams: `edit.import_markdown` (the same route
+      // ── `B-6`'s limb provisions with) and the renderer bridge's `sidebar.openDocumentTab` (the seam the app
+      // ── graph's own search-result handler calls). The document is LONG on purpose: a stage box that cannot
+      // ── overflow cannot hold a non-zero scroll, and a zero scroll would make `scrollRestored` vacuous.
+      if (b10.parkReason === null) {
+        const b10Paras = []
+        for (let i = 0; i < 40; i += 1) b10Paras.push(`Paragraph ${i + 1}: the display-state limb's fixture carries long lines on purpose, so the stage's own box genuinely overflows and the scroll this limb records and restores is a REAL non-zero offset rather than a geometry artifact.`)
+        const b10FixtureText = `# B-10 Display Limb Fixture\n\n${b10Paras.join('\n\n')}\n`
+        // ⟨NO FIXTURE IN THE REPO ROOT, AND INSIDE THE CORPUS ROOT — both clauses are load-bearing (fix round, MEASURED).⟩
+        // The fixture used to be written INTO `ROOT` itself and removed at step (9), so a crash between the two left a
+        // `b10-display-limb-<n>.md` document fixture at the repo root where `git status` would read it as part of the change set.
+        // The first repair moved it to the OS temp root — and the very next live run measured why THAT cannot work either: the
+        // importer's containment root is SERVER-side (`src/main/markdown-import.ts`: `corpusRoot = resolve(params.corpusRoot ??
+        // process.cwd())`) and `edit.import_markdown`'s schema carries no `corpusRoot`, so an absolute `/tmp` path is refused
+        // `markdown import: path outside corpus root` and the limb parked on every run. The run's OWN SCRATCH DIR is therefore
+        // used: `.live-fixture/` under `ROOT` — the driver's own fixture root, GITIGNORED (`.gitignore`), so it is inside the
+        // corpus root AND a crash can never put a document fixture in `git status`. Created here, removed WITH its directory at
+        // step (9); the B-6 limb's own fixture works by the same rule (it writes under `ROOT`).
+        mkdirSync(join(ROOT, '.live-fixture'), { recursive: true })
+        b10FixtureDir = mkdtempSync(join(ROOT, '.live-fixture', 'b10-display-limb-'))
+        b10FixturePath = join(b10FixtureDir, `b10-display-limb-${Date.now() % 100000}.md`)
+        writeFileSync(b10FixturePath, b10FixtureText, 'utf8')
+        const b10Import = await mcpToolResult(h.mcp, 'edit.import_markdown', { files: [b10FixturePath] })
+          .catch((e) => ({ ok: false, isError: false, tool: 'edit.import_markdown', value: null, errorText: String(e && e.message ? e.message : e), transportError: true }))
+        b10DocId = b10Import && b10Import.value && Array.isArray(b10Import.value.documentIds) && typeof b10Import.value.documentIds[0] === 'string' ? b10Import.value.documentIds[0] : null
+        b10Print(`(1a) FIXTURE IMPORT — ROUTE="mcp:edit.import_markdown" REPLY VERBATIM=${JSON.stringify(b10Import.value)} isError=${b10Import.isError} => documentId=${JSON.stringify(b10DocId)} (fixture file ${JSON.stringify(b10FixturePath)}, removed in the restore)`)
+        if (b10DocId === null) {
+          b10.parkReason = `PRECONDITION-FAILED: \`edit.import_markdown\` answered no documentIds, so the document this limb mounts was never created (reply verbatim: ${JSON.stringify(b10Import.value)}, isError=${b10Import.isError})`
+          b10Print(`NOT-DRIVEN ${b10.parkReason}`)
+        }
+      }
+      let b10Mounted = null
+      if (b10.parkReason === null) {
+        const b10Open = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;if(!s||typeof s.openDocumentTab!=='function')return {available:false};s.openDocumentTab(${JSON.stringify(b10DocId)});return {available:true}})()`)
+        await waitFor(async () => (await ufEditSurfaceState(h)).marker === b10DocId, { timeout: 20000, step: 400 }).catch(() => null)
+        b10Mounted = await ufEditSurfaceState(h)
+        b10Print(`(1b) THE DOCUMENT'S OWN TAB — ROUTE="window.provident.sidebar.openDocumentTab" (the app's own seam; the renderer bridge member the app graph's search-result handler calls) answered ${JSON.stringify(b10Open)}; #page-edit-surface marker=${JSON.stringify(b10Mounted.marker)} (wanted ${JSON.stringify(b10DocId)}) blockCount=${b10Mounted.blockCount}`)
+        if (b10Mounted.marker !== b10DocId) {
+          b10.parkReason = `PRECONDITION-FAILED: the imported document never became the stage document (surface marker=${JSON.stringify(b10Mounted.marker)}, wanted ${JSON.stringify(b10DocId)}) within the bounded wait — the tab/stage seam did not settle, so no caret of THIS document's can be placed`
+          b10Print(`NOT-DRIVEN ${b10.parkReason}`)
+        }
+      }
+      // ── (2) A REAL CARET, REAL TYPED TEXT, AND THE COMMIT-ON-BLUR THAT CARRIES THE CARET INTO THE RECORD. The
+      // ── typed marker is the NO-CONTENT PROOF's own subject: it must be in the DOM and ABSENT from the record's
+      // ── bytes.
+      const b10Marker = `B10DISPLAY${Date.now() % 100000}`
+      let b10CaretPlaced = null
+      if (b10.parkReason === null) {
+        const b10Idx = b10Mounted.blockCount > 1 ? b10Mounted.blockCount - 1 : 0
+        b10CaretPlaced = await ufCaretAt(h, b10Idx)
+        await sleep(250)
+        await ufType(h, b10Marker)
+        const b10TypedInSurface = await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');return s?String(s.textContent||'').indexOf(${JSON.stringify(b10Marker)})>=0:false})()`)
+        const b10Blur = await ufBlurSurface(h)
+        b10Print(`(2a) REAL INPUT — caret placed at block ${b10Idx} (${JSON.stringify(b10CaretPlaced)}) then REAL typed text "${b10Marker}" present in #page-edit-surface=${b10TypedInSurface}; the REAL blur (the page-commit seam) answered warning=${b10Blur.warning} kind=${JSON.stringify(b10Blur.warningKind)} surfaceLen=${b10Blur.surfaceLen} — this blur is the \`commit-on-blur\` capture's own trigger`)
+        if (b10CaretPlaced.ok !== true) {
+          b10.parkReason = `PRECONDITION-FAILED: no caret could be placed in #page-edit-surface (${JSON.stringify(b10CaretPlaced)}) — a driver-side state, so the limb is NOT-DRIVEN`
+          b10Print(`NOT-DRIVEN ${b10.parkReason}`)
+        }
+      }
+      // ── (3) THE POSITION THE ROUND TRIP MUST CARRY: the caret placed again (so the DOM holds it at the switching
+      // ── instant) and the stage's OWN box scrolled by REAL input — a CDP WHEEL over the box, read back; a wheel
+      // ── the box does not take falls back to the box's OWN `scrollTop` assignment (the very property the restore
+      // ── writes) and the path taken is PRINTED, never assumed.
+      let b10ScrollPath = 'none'
+      if (b10.parkReason === null) {
+        await ufCaretAt(h, b10Mounted.blockCount > 1 ? b10Mounted.blockCount - 1 : 0)
+        await sleep(300)
+        const b10Geom = await h.cdp.evaluate(`(()=>{const b=document.getElementById('zone:main');if(!b)return null;const r=b.getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2),w:Math.round(r.width),h:Math.round(r.height),scrollTop:Math.round(b.scrollTop),scrollHeight:b.scrollHeight,clientHeight:b.clientHeight}})()`)
+        if (b10Geom && b10Geom.w > 0 && b10Geom.h > 0) {
+          const b10Wheel = await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: b10Geom.x, y: b10Geom.y, deltaX: 0, deltaY: 240, pointerType: 'mouse' }).catch((e) => ({ __error: String(e && e.message ? e.message : e) }))
+          await sleep(700)
+          const b10AfterWheel = await h.cdp.evaluate(`(()=>{const b=document.getElementById('zone:main');return b?Math.round(b.scrollTop):null})()`)
+          b10Print(`(3a) THE REAL SCROLL — CDP WHEEL at the stage box's own centre (${JSON.stringify(b10Geom)}) answered ${JSON.stringify(b10Wheel)}; #app [id="zone:main"].scrollTop ${JSON.stringify(b10AfterWheel)}`)
+          if (typeof b10AfterWheel === 'number' && b10AfterWheel > 0) b10ScrollPath = 'cdp-wheel'
+        }
+        if (b10ScrollPath === 'none') {
+          const b10Assigned = await h.cdp.evaluate(`(()=>{const b=document.getElementById('zone:main');if(!b)return null;const max=Math.max(0,Math.round(b.scrollHeight-b.clientHeight));const want=Math.min(240,max);b.scrollTop=want;return {want:want,landed:Math.round(b.scrollTop),max:max}})()`)
+          if (b10Assigned && b10Assigned.landed > 0) b10ScrollPath = 'dom-assign'
+          b10Print(`(3b) THE WHEEL DID NOT MOVE THE BOX — the box's OWN scrollTop was assigned instead (the same property the restore writes): ${JSON.stringify(b10Assigned)}; scrollPath=${b10ScrollPath}`)
+        }
+        await sleep(1000)
+      }
+      // ── (4) THE BASELINE, AT THE SWITCHING INSTANT: the caret, the box's scroll, the assembly root, every pane
+      // ── frame MARKED, the surface census and the active tab's identity — ONE call, ONE instant.
+      if (b10.parkReason === null) {
+        b10Before = await ufB10StageDisplayCensus(h, { mark: true })
+        b10TabId = b10Before.activeTabId
+        b10TargetDoc = b10Before.activeTabDocumentId ?? b10DocId
+        b10Print(`(4) BASELINE AT THE SWITCHING INSTANT — tab=${JSON.stringify(b10TabId)} targetKind=${JSON.stringify(b10Before.activeTabKind)} targetDocumentId=${JSON.stringify(b10TargetDoc)} (read off the STRIP's own \`data-document-id\`; the TARGET decides what is shown) caretBefore=${JSON.stringify(b10Before.caret)} scrollBefore=${JSON.stringify(b10Before.scrollTop)} boxOverflows=${b10Before.boxOverflows} (scrollHeight=${b10Before.scrollHeight} clientHeight=${b10Before.clientHeight}) scrollPath=${b10ScrollPath} #wiki-root data-node-id=${JSON.stringify(b10Before.root)} (x${b10Before.rootCount}) surfaceCount=${b10Before.surfaceCount} markerCount=${b10Before.markerCount} frames=${JSON.stringify((b10Before.frames || []).map((f) => f.pid + '@' + f.nodeId))}`)
+        if (b10TabId === null) {
+          b10.parkReason = 'PRECONDITION-FAILED: the tab strip renders no active tab (no `.tab.is-active` with a `data-tab-id`), so the record has no address segment to write at and no tab to switch away from'
+          b10Print(`NOT-DRIVEN ${b10.parkReason}`)
+        } else if (b10Before.boxOverflows !== true || !(typeof b10Before.scrollTop === 'number' && b10Before.scrollTop > 0)) {
+          b10.parkReason = `PRECONDITION-FAILED: the stage's own box could not be scrolled (scrollPath=${b10ScrollPath}, scrollTop=${JSON.stringify(b10Before.scrollTop)}, scrollHeight=${JSON.stringify(b10Before.scrollHeight)}, clientHeight=${JSON.stringify(b10Before.clientHeight)}) — a box with nothing to scroll cannot carry a non-zero view, so the scroll limb would be vacuous and is NOT-DRIVEN rather than claimed`
+          b10Print(`NOT-DRIVEN ${b10.parkReason}`)
+        } else if (b10Before.caret === null) {
+          b10.parkReason = 'PRECONDITION-FAILED: window.getSelection() states no caret inside #page-edit-surface at the switching instant, so there is no position to carry (a driver-side state: the caret was placed, and the reading says it did not survive)'
+          b10Print(`NOT-DRIVEN ${b10.parkReason}`)
+        }
+      }
+      // ── (5) THE SECOND TAB — through the app's own document-tab seam, the same route (1b) used — and the REAL CLICK
+      // ── back. This IS the round trip: leaving the tab is the `tab-switch` capture's trigger, returning to it is the
+      // ── restore's only site (§6: only an ACTIVATION restores; a push never does).
+      let b10Record = null
+      if (b10.parkReason === null) {
+        const b10Docs = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch(() => null)
+        const b10Others = b10Docs && Array.isArray(b10Docs.documents)
+          ? b10Docs.documents.map((d) => (d ? d.documentId : null)).filter((id) => typeof id === 'string' && id !== '' && id !== b10DocId)
+          : []
+        b10SecondDoc = b10Others.length > 0 ? b10Others[0] : null
+        b10Print(`(5a) THE SECOND TAB'S DOCUMENT — ROUTE="mcp:rag.list_documents" answered ${b10Others.length} document(s) other than ${JSON.stringify(b10DocId)}; chosen=${JSON.stringify(b10SecondDoc)}`)
+        if (b10SecondDoc === null) {
+          b10.parkReason = `PRECONDITION-FAILED: the store holds no OTHER document (rag.list_documents: ${JSON.stringify(b10Docs)}), so no second tab can exist and the round trip cannot be driven`
+          b10Print(`NOT-DRIVEN ${b10.parkReason}`)
+        }
+      }
+      if (b10.parkReason === null) {
+        const b10Away = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;if(!s||typeof s.openDocumentTab!=='function')return {available:false};s.openDocumentTab(${JSON.stringify(b10SecondDoc)});return {available:true}})()`)
+        await sleep(3000)
+        const b10OnSecond = await ufB10StageDisplayCensus(h, { mark: false, reuseToken: b10Before.token })
+        b10SecondCensus = b10OnSecond
+        b10SecondTabId = b10OnSecond.activeTabId
+        b10Print(`(5b) SWITCHED AWAY — ROUTE="window.provident.sidebar.openDocumentTab(${JSON.stringify(b10SecondDoc)})" answered ${JSON.stringify(b10Away)}; the ACTIVE tab is now ${JSON.stringify(b10SecondTabId)} (documentShown=${JSON.stringify(b10OnSecond.documentShown)}) — leaving ${JSON.stringify(b10TabId)} is the \`tab-switch\` capture's own trigger`)
+        if (b10SecondTabId === null || b10SecondTabId === b10TabId) {
+          b10.parkReason = `PRECONDITION-FAILED: the switch did not change the active tab (before ${JSON.stringify(b10TabId)}, after ${JSON.stringify(b10SecondTabId)}) — no round trip occurred, so nothing is claimed`
+          b10Print(`NOT-DRIVEN ${b10.parkReason}`)
+        }
+      }
+      // ── (6) THE RECORD, READ OFF DISK — the entry the `tab-switch` capture has just written for the tab this limb
+      // ── will return to, plus the NO-CONTENT proof (member names within the allowlist; the typed text absent from
+      // ── the file's BYTES — a VALUE census, not a name census).
+      if (b10.parkReason === null) {
+        b10Record = b10ReadRecord()
+        b10Entry = b10Record.family !== null && Object.hasOwn(b10Record.family, b10TabId) ? b10Record.family[b10TabId] : null
+        const b10EntryMembers = b10Entry !== null && typeof b10Entry === 'object' ? Object.keys(b10Entry) : null
+        b10AllowlistOk = b10EntryMembers !== null && b10EntryMembers.every((m) => ['documentId', 'caret', 'view'].includes(m))
+        b10TypedAbsent = typeof b10Record.bytes === 'string' && !b10Record.bytes.includes(b10Marker)
+        b10Print(`(6a) recordEntry=${JSON.stringify(b10Entry)} (path=${JSON.stringify(b10Record.path)} bytes=${b10Record.bytes.length} familyKeys=${JSON.stringify(b10Record.familyKeys ?? null)} tab=${JSON.stringify(b10TabId)})`)
+        // THE FILE'S OWN BYTES, AS A SLICE — a re-serialisation of a parsed entry is a reading of the record's
+        // SHAPE, and the report must also be able to quote what the store actually wrote.
+        const b10RawAt = typeof b10Record.bytes === 'string' ? b10Record.bytes.indexOf('"display"') : -1
+        b10Print(`(6a') recordEntryRawBytes=${JSON.stringify(b10RawAt < 0 ? null : b10Record.bytes.slice(b10RawAt, b10RawAt + 420))}`)
+        b10Print(`(6b) recordHasContentMember=${b10Entry !== null && b10AllowlistOk === true && b10TypedAbsent === true} (recordEntryMembersWithinAllowlist=${b10AllowlistOk} recordEntryMembers=${JSON.stringify(b10EntryMembers)} recordTypedTextAbsentFromBytes=${b10TypedAbsent} — the typed text "${b10Marker}" read as a VALUE census over the whole file) recordEntryHasCaret=${b10Entry !== null && b10Entry.caret !== null && b10Entry.caret !== undefined} recordEntryHasView=${b10Entry !== null && b10Entry.view !== null && b10Entry.view !== undefined}`)
+        // THE FAMILY-WIDE DISCRIMINATOR, and it is the one that tells a MISSING TAB ENTRY from a CAPTURE THAT NEVER
+        // RAN: every entry in the family is stamped only when NO caret report and NO view report ever reached the
+        // capture — which is a property of the capture SEAM, not of this limb's round trip.
+        const b10FamilyMembers = b10Record.family === null ? {} : b10Record.family
+        const b10FamilyEntries = Object.keys(b10FamilyMembers)
+        const b10StampOnly = b10FamilyEntries.filter((k) => {
+          const e = b10FamilyMembers[k]
+          return e === null || typeof e !== 'object' || (e.caret === undefined && e.view === undefined)
+        })
+        b10Print(`(6c) recordFamilyCensus — entries=${b10FamilyEntries.length} stampOnly=${b10StampOnly.length} (${JSON.stringify(b10StampOnly)}) membersPerEntry=${JSON.stringify(b10FamilyEntries.map((k) => k + ':' + Object.keys(b10FamilyMembers[k] || {}).join('+'))) } — EVERY entry in this family for THIS RUN's tabs read off disk: an entry with no \`caret\` and no \`view\` means no \`commit-on-blur\` and no \`scroll-settle\` report ever reached the capture (the pinned three write events are \`tab-switch\`, \`commit-on-blur\`, \`scroll-settle\`), so this number separates "the tab this limb left was never written" from "no caret/view was ever CAPTURED at all"`)
+        if (b10Entry === null) {
+          b10.failReason = `THE RECORD HOLDS NO ENTRY FOR THE TAB under test (family members=${JSON.stringify(b10Record.familyKeys ?? null)}; the file is PRESENT at ${JSON.stringify(b10Record.path)} with ${b10Record.bytes.length} bytes) — the \`tab-switch\` capture did not write one, so the record this unit exists to write is EMPTY for the very tab the switch left`
+          b10Print(`FAIL ${b10.failReason}`)
+        }
+      }
+      // ── (7) THE RETURN — a REAL CLICK on the tab (the restore's ONLY site), then the SAME census, MARKED back.
+      let b10ReturnPath = null
+      let b10MountSettleMs = null
+      if (b10.parkReason === null) {
+        b10ReturnPath = await ufRealClickTab(h, b10TabId)
+        await sleep(3500)
+        const b10SettleStarted = Date.now()
+        await waitFor(async () => (await ufB10StageDisplayCensus(h, { mark: false, reuseToken: b10Before.token })).documentShown === b10TargetDoc, { timeout: 8000, step: 400 }).catch(() => null)
+        b10MountSettleMs = Date.now() - b10SettleStarted
+        b10After = await ufB10StageDisplayCensus(h, { mark: false, reuseToken: b10Before.token })
+      }
+      let b10CaretBeforeMatchesRecord = null
+      let b10ScrollBeforeMatchesRecord = null
+      if (b10.parkReason === null) {
+        const b10RecordCaret = b10Entry !== null && b10Entry.caret !== null && typeof b10Entry.caret === 'object' ? b10Entry.caret : null
+        const b10RecordView = b10Entry !== null && b10Entry.view !== null && typeof b10Entry.view === 'object' ? b10Entry.view : null
+        const b10RecordOffset = b10RecordView !== null && typeof b10RecordView.offset === 'number' ? Math.round(b10RecordView.offset) : null
+        const b10RecordCaretKey = b10CaretKey(b10RecordCaret)
+        const b10BeforeCaretKey = b10CaretKey(b10Before.caret)
+        const b10AfterCaretKey = b10CaretKey(b10After.caret)
+        b10CaretBeforeMatchesRecord = b10RecordCaretKey !== null && b10BeforeCaretKey === b10RecordCaretKey
+        b10ScrollBeforeMatchesRecord = b10RecordOffset !== null && b10Before.scrollTop === b10RecordOffset
+        // ⟨THE RE-GRAINED CARET CLAIM — see `b10CaretAtPathInDom`'s docblock: the OLD reading compared child-index PATHS across a
+        // re-authored surface (`[0]` before vs `[0,0]` after at the SAME offset), which cannot separate "landed on the record's
+        // character" from "never applied". The claim now graded is character identity + the record's own offsets.⟩
+        b10CaretIdentity = await b10CaretAtPathInDom(b10RecordCaret)
+        const b10PathShapeEqual = b10RecordCaretKey !== null && b10AfterCaretKey === b10RecordCaretKey
+        b10CaretRestored = b10CaretIdentity !== null && b10CaretIdentity.available === true && b10CaretIdentity.caretAtRecordPath === true
+        b10ScrollRestored = b10RecordOffset !== null && b10RecordOffset > 0 && b10After.scrollTop === b10RecordOffset
+        b10Print(`(7a) caretBefore=${JSON.stringify(b10Before.caret)} caretAfterTabRoundTrip=${JSON.stringify(b10After.caret)} recordCaret=${JSON.stringify(b10RecordCaret)} => caretRestored=${b10CaretRestored} (THE CLAIM IS CHARACTER IDENTITY, NOT PATH SHAPE — the record's OWN path re-resolved against the CURRENT #page-edit-surface names the text node the live selection sits on, at the record's own offsets: ${JSON.stringify(b10CaretIdentity)}; the raw path-shape equality is printed as its own reading, pathShapeEqual=${b10PathShapeEqual}, and it is a property of the re-author and NOT of the restore — MEASURED: before [0] vs after [0,0] at the same offset, which the first driven run read as a false caretRestored). caretBeforeMatchesRecord=${b10CaretBeforeMatchesRecord} (the record's own caret compared EDGE BY EDGE with the DOM's at the switching instant; \`focused\` before=${JSON.stringify(b10Before.caret ? b10Before.caret.focused : null)} after=${JSON.stringify(b10After.caret ? b10After.caret.focused : null)} record=${JSON.stringify(b10RecordCaret ? b10RecordCaret.focused : null)})`)
+        b10Print(`(7b) scrollBefore=${JSON.stringify(b10Before.scrollTop)} scrollAfterTabRoundTrip=${JSON.stringify(b10After.scrollTop)} recordView=${JSON.stringify(b10RecordView)} recordViewOffset=${JSON.stringify(b10RecordOffset)} => scrollRestored=${b10ScrollRestored} (scrollBeforeMatchesRecord=${b10ScrollBeforeMatchesRecord})`)
+        // ═══ ⟨THE TWO CLAUSES RE-GRAINED (fix round), BECAUSE THEY WERE UNSATISFIABLE BY CONSTRUCTION.⟩ ═══
+        // The first live run read `assemblyRootUnchanged=false (#wiki-root node-5787 → node-8860)` and
+        // `otherPanesSurvived=false`. Both terms were BORROWED FROM A PANE-PAINT UNIT (`B-3`/`B-5`), where "the assembly root held"
+        // and "every other pane frame still carries its mark" are the right claims — and on a TAB-SWITCH round trip they are
+        // impossible: a document activation runs `host.mountTab(entry)` → `mountDocumentStage` → `loadAppGraph`
+        // (`src/renderer/sidebar-panes.ts`), the app's PRE-EXISTING single-active-render behaviour, so the WHOLE assembly is
+        // re-authored once per activation: the `#wiki-root` node id re-mints and every pane frame ELEMENT is re-created (a
+        // DOM own-property mark cannot survive that, which is what `marked:false` was reading). §6 EXCLUDES that mount BY NAME.
+        // Their TRUE SUCCESSOR CLAIMS are the two below — renamed, re-measured, and neither silently dropped:
+        //   (i')  NO RE-ASSEMBLY BEYOND THE STAGE ACTIVATION'S OWN: exactly ONE re-author per activation and NONE from the
+        //         capture or the restore. Measured as the COUNT of `#wiki-root` data-node-id CHANGES across the round trip
+        //         (baseline → on the second tab → back), which must be exactly 2 — one per activation — AND a quiet re-read taken
+        //         after the return had settled, with nothing driving the app, which must read the SAME root: the restore itself
+        //         moves nothing.
+        //   (ii') THE PANE SET AND THE DOCUMENT SHOWN ARE THE TARGET'S: the pane frames are re-authored by that same mount, so the
+        //         claim that survives is SET EQUALITY (the pane ids present before and after are identical — no pane lost, none
+        //         added) plus the document on screen being the tab TARGET's.
+        const b10RootSamples = [b10Before.root, b10SecondCensus === null ? null : b10SecondCensus.root, b10After.root]
+        b10RootRemints = b10RootSamples.reduce((count, sample, at) => (at > 0 && sample !== null && sample !== b10RootSamples[at - 1] ? count + 1 : count), 0)
+        b10AfterQuiet = await ufB10StageDisplayCensus(h, { mark: false, reuseToken: b10Before.token })
+        b10RestoreMovesNothing =
+          b10AfterQuiet.root !== null && b10AfterQuiet.root === b10After.root &&
+          b10AfterQuiet.surfaceCount === b10After.surfaceCount && b10AfterQuiet.documentShown === b10After.documentShown
+        const b10PaneIds = (census) => (census !== null && Array.isArray(census.frames) ? census.frames.map((f) => f.pid) : []).slice().sort()
+        const b10PaneSetBefore = b10PaneIds(b10Before)
+        const b10PaneSetAfter = b10PaneIds(b10After)
+        b10ExactlyOne = b10Before.surfaceCount === 1 && b10After.surfaceCount === 1 && b10After.markerCount === 1
+        b10DocShownIsTarget = b10After.documentShown === b10TargetDoc
+        b10PaneSetHeld = b10PaneSetBefore.length > 0 && JSON.stringify(b10PaneSetBefore) === JSON.stringify(b10PaneSetAfter)
+        const b10NoReassemblyBeyondTheActivation = b10RootRemints === 2 && b10RestoreMovesNothing === true
+        const b10PaneSetAndDocumentAreTheTargets = b10PaneSetHeld === true && b10DocShownIsTarget === true
+        b10Print(`(i')/(ii') THE RE-GRAINED CLAUSES — (§8 (i)'s \`assemblyRootUnchanged\` and (ii)'s \`otherPanesSurvived\` were BORROWED FROM A PANE-PAINT UNIT and are UNSATISFIABLE on a tab-switch round trip: a document activation runs mountTab → mountDocumentStage → loadAppGraph (sidebar-panes.ts), the app's pre-existing single-active render, which re-authors the WHOLE assembly — so the root re-mints and every pane frame ELEMENT is re-created, and a DOM own-property mark cannot survive it. §6 excludes that mount BY NAME. Their successor claims, measured here:) (i') noReassemblyBeyondTheActivation=${b10NoReassemblyBeyondTheActivation} (the #wiki-root data-node-id samples across the round trip are ${JSON.stringify(b10RootSamples)} → re-mints=${b10RootRemints} of the 2 activations, one per activation; AND the restore itself moves nothing: the quiet re-read taken after the return settled reads root=${JSON.stringify(b10AfterQuiet.root)} surfaceCount=${JSON.stringify(b10AfterQuiet.surfaceCount)} documentShown=${JSON.stringify(b10AfterQuiet.documentShown)} vs the returned reading's ${JSON.stringify(b10After.root)}/${JSON.stringify(b10After.surfaceCount)}/${JSON.stringify(b10After.documentShown)} → restoreMovesNothing=${b10RestoreMovesNothing}) (ii') paneSetAndDocumentAreTheTargets=${b10PaneSetAndDocumentAreTheTargets} (pane ids before=${JSON.stringify(b10PaneSetBefore)} after=${JSON.stringify(b10PaneSetAfter)} → paneSetHeld=${b10PaneSetHeld}; documentShown=${JSON.stringify(b10After.documentShown)} targetDocumentId=${JSON.stringify(b10TargetDoc)} → documentShownIsTarget=${b10DocShownIsTarget}) (iv) exactlyOneSurface=${b10ExactlyOne} (#page-edit-surface ${b10Before.surfaceCount} -> ${b10After.surfaceCount}, [data-edit-surface] ${b10After.markerCount})`)
+        b10Print(`(<v>) documentShown=${JSON.stringify(b10After.documentShown)} targetDocumentId=${JSON.stringify(b10TargetDoc)} => documentShownIsTarget=${b10DocShownIsTarget} (the RETURN's own click path=${JSON.stringify(b10ReturnPath ? b10ReturnPath.path : null)}; the stage settled on the target's document after ${b10MountSettleMs}ms of bounded waiting)`)
+      }
+      // ── (8) TWO CONTROLS, BECAUSE ONE COULD NOT DISCRIMINATE ITS OWN MECHANISM (fix round, MEASURED on the first DRIVEN run).
+      // ── The old single control demanded "no caret, scrollTop === 0" after a mismatch forge and read the PREVIOUS restore's
+      // ── residue instead (caret path[0,0]@41, scrollTop 12201 — neither forged value applied, the target's document shown).
+      // ── Two mechanisms produce those bytes identically: (a) a DROP that applies nothing while the fork's OWN carrier replay
+      // ── (`sidebar-panes.ts`'s `reDerive` → `restorePageCaret`, §6's untouched route) re-applies the controller's slot after
+      // ── the mount, and (b) the app restoring the PRE-forge entry. So "no caret on screen" is NOT a claim this unit can make —
+      // ── the app's own pre-existing carrier puts one there. The two claims that CAN separate them are the ones below:
+      // ──   (8A) THE ADMIT CONTROL — a forged entry whose `documentId` EQUALS the tab target's, carrying caret offset 0 and
+      // ──        view offset 137 (values no capture in this run ever produced), MUST be APPLIED: the caret lands at the forged
+      // ──        record's own character at offset 0 and the box at 137. That proves the restore is LIVE and its apply is readable
+      // ──        at app grain — without it the mismatch DROP below is answered identically by a dead restore.
+      // ──   (8B) THE DROP CONTROL — the SAME route with the stamp FORGED to a different document and DIFFERENT values (caret
+      // ──        offset 3, view offset 613) must apply NEITHER: the caret is not at offset 3, the box is not at 613, and the
+      // ──        document shown is still the TARGET's (the stamp never redirects what is on screen, §3).
+      // ── Both forges are made while the tab is NOT active, because a capture ON LEAVING the tab would (correctly) re-stamp it.
+      let b10Control = null
+      let b10ControlWrite = null
+      let b10ControlEntryOnDisk = null
+      const b10AdmitForge = {
+        documentId: b10TargetDoc,
+        caret: { kind: 'rich', anchor: { path: [0], offset: 0 }, focus: { path: [0], offset: 0 }, focused: true },
+        view: { offset: 137, section: 'b10-control-admitted' },
+      }
+      const b10ControlForge = {
+        documentId: b10SecondDoc,
+        caret: { kind: 'rich', anchor: { path: [0], offset: 3 }, focus: { path: [0], offset: 3 }, focused: true },
+        view: { offset: 613, section: 'b10-control-forged' },
+      }
+      const b10BridgeWrite = async (entry) => await h.cdp.evaluate(`(async()=>{try{const d=window.provident&&window.provident.display;if(!d||typeof d.write!=='function')return {called:false,reason:'window.provident.display.write is not on the bridge'};const r=await d.write({tabId:${JSON.stringify(b10TabId)},entry:${JSON.stringify(entry)}});return {called:true,result:r}}catch(e){return {called:true,threw:String(e&&e.message?e.message:e)}}})()`)
+      if (b10.parkReason === null) {
+        // ── (8A) THE ADMIT CONTROL.
+        if (b10SecondTabId !== null) { await ufRealClickTab(h, b10SecondTabId); await sleep(3000) }
+        b10AdmitWrite = await b10BridgeWrite(b10AdmitForge)
+        await sleep(2000)
+        const b10AdmitRecord = b10ReadRecord()
+        b10AdmitEntryOnDisk = b10AdmitRecord.family !== null && Object.hasOwn(b10AdmitRecord.family, b10TabId) ? b10AdmitRecord.family[b10TabId] : null
+        const b10AdmitBack = await ufRealClickTab(h, b10TabId)
+        await sleep(3500)
+        await waitFor(async () => (await ufB10StageDisplayCensus(h, { mark: false, reuseToken: b10Before.token })).documentShown === b10TargetDoc, { timeout: 8000, step: 400 }).catch(() => null)
+        b10Admit = await ufB10StageDisplayCensus(h, { mark: false, reuseToken: b10Before.token })
+        const b10AdmitIdentity = await b10CaretAtPathInDom(b10AdmitForge.caret)
+        b10AdmitHeld = b10AdmitEntryOnDisk !== null && b10AdmitEntryOnDisk.documentId === b10TargetDoc
+        b10AdmitMoved = b10AdmitIdentity !== null && b10AdmitIdentity.available === true && b10AdmitIdentity.caretAtRecordPath === true &&
+          b10Admit.scrollTop === b10AdmitForge.view.offset && b10Admit.documentShown === b10TargetDoc
+        b10Print(`(8A) THE ADMIT CONTROL — ROUTE="window.provident.display.write" (the app's OWN sender) answered ${JSON.stringify(b10AdmitWrite)} for tab ${JSON.stringify(b10TabId)} with the stamp ADMITTING (documentId=${JSON.stringify(b10AdmitForge.documentId)} = the tab's target) and values NO capture in this run produced (caret offset ${b10AdmitForge.caret.anchor.offset}, view offset ${b10AdmitForge.view.offset}); the entry ON DISK=${JSON.stringify(b10AdmitEntryOnDisk)} => forgeLanded=${b10AdmitHeld}; the return click (path=${JSON.stringify(b10AdmitBack ? b10AdmitBack.path : null)}) restored from it: caretAfterAdmit=${b10Admit.caret === null ? 'null' : JSON.stringify(b10Admit.caret)} caretIdentityAfterAdmit=${JSON.stringify(b10AdmitIdentity)} scrollAfterAdmit=${JSON.stringify(b10Admit.scrollTop)} documentShownAdmit=${JSON.stringify(b10Admit.documentShown)} => admitApplied=${b10AdmitMoved} (the caret at the forged record's own character and its offset, the box at ${b10AdmitForge.view.offset}, the target's document) — THIS is the limb that makes the DROP below a reading`)
+        // ── (8B) THE DROP CONTROL.
+        if (b10SecondTabId !== null) { await ufRealClickTab(h, b10SecondTabId); await sleep(3000) }
+        b10ControlWrite = await b10BridgeWrite(b10ControlForge)
+        await sleep(2000)
+        const b10ControlRecord = b10ReadRecord()
+        b10ControlEntryOnDisk = b10ControlRecord.family !== null && Object.hasOwn(b10ControlRecord.family, b10TabId) ? b10ControlRecord.family[b10TabId] : null
+        b10Print(`(8a) THE CONTROL'S FORGE — ROUTE="window.provident.display.write" (the app's OWN sender: preload \`display.write\` -> \`${'provident:display:write'}\` -> the record's \`commitTab\`) answered ${JSON.stringify(b10ControlWrite)} for tab ${JSON.stringify(b10TabId)} with documentId FORGED to ${JSON.stringify(b10SecondDoc)} (a DIFFERENT document than the tab's target ${JSON.stringify(b10TargetDoc)}) and a caret+view the restore must NOT apply (${JSON.stringify(b10ControlForge)}); the entry ON DISK after the forge=${JSON.stringify(b10ControlEntryOnDisk)} => forgeLanded=${b10ControlEntryOnDisk !== null && b10ControlEntryOnDisk.documentId === b10SecondDoc}`)
+        const b10ControlBack = await ufRealClickTab(h, b10TabId)
+        await sleep(3500)
+        await waitFor(async () => (await ufB10StageDisplayCensus(h, { mark: false, reuseToken: b10Before.token })).documentShown === b10TargetDoc, { timeout: 8000, step: 400 }).catch(() => null)
+        b10Control = await ufB10StageDisplayCensus(h, { mark: false, reuseToken: b10Before.token })
+        b10ControlCaret = b10Control.caret
+        b10ControlScroll = b10Control.scrollTop
+        b10ControlDocShown = b10Control.documentShown
+        const b10ControlIdentity = await b10CaretAtPathInDom(b10ControlForge.caret)
+        // NEITHER FORGED MEMBER LANDED — the whole of the drop claim, and the one reading the two mechanisms above cannot fake
+        // identically: a value the app can only reach by APPLYING the forged entry is absent.
+        const b10ControlCaretIsForged = b10ControlCaret !== null && b10ControlCaret.anchor !== undefined && b10ControlCaret.anchor.offset === b10ControlForge.caret.anchor.offset
+        const b10ControlScrollIsForged = b10ControlScroll === b10ControlForge.view.offset
+        b10ControlHeld = b10ControlCaretIsForged === false && b10ControlScrollIsForged === false && b10ControlDocShown === b10TargetDoc &&
+          b10ControlEntryOnDisk !== null && b10ControlEntryOnDisk.documentId === b10SecondDoc
+        b10Print(`(8b) THE CONTROL'S READING — the return click (path=${JSON.stringify(b10ControlBack ? b10ControlBack.path : null)}) activated the tab whose record entry is FORGED to a DIFFERENT document: caretAfterControlRestore=${b10ControlCaret === null ? 'null' : JSON.stringify(b10ControlCaret)} (forged caret offset ${b10ControlForge.caret.anchor.offset} → landed=${b10ControlCaretIsForged}) caretIdentity=${JSON.stringify(b10ControlIdentity)} scrollAfterControlRestore=${b10ControlScroll === null ? 'null' : b10ControlScroll} (forged view offset ${b10ControlForge.view.offset} → landed=${b10ControlScrollIsForged}) documentShownControl=${JSON.stringify(b10ControlDocShown)} (targetDocumentId=${JSON.stringify(b10TargetDoc)}) => controlHeld=${b10ControlHeld} — the stamp-mismatch DROP, claimed as "NEITHER FORGED MEMBER WAS APPLIED and the TARGET's document is still shown", NOT as "no caret on screen": the residue standing there is the fork's OWN carrier replay (\`sidebar-panes.ts\`'s \`reDerive\` → \`restorePageCaret\` re-applies the controller's slot on a mount — §6's untouched route), which this unit neither causes nor may clear`)
+        if (b10ControlHeld !== true) {
+          b10.failReason = b10.failReason ?? `THE CONTROL DID NOT HOLD — with the record's entry for tab ${JSON.stringify(b10TabId)} FORGED to documentId ${JSON.stringify(b10SecondDoc)} (a different document) and carrying caret offset ${b10ControlForge.caret.anchor.offset} and view offset ${b10ControlForge.view.offset}, the same round trip read caretAfterControlRestore=${b10ControlCaret === null ? 'null' : JSON.stringify(b10ControlCaret)} (forged caret landed=${b10ControlCaretIsForged}), scrollAfterControlRestore=${JSON.stringify(b10ControlScroll)} (forged view landed=${b10ControlScrollIsForged}) and documentShownControl=${JSON.stringify(b10ControlDocShown)} — required: NEITHER forged member applied and the TARGET's document (${JSON.stringify(b10TargetDoc)}) shown`
+          b10Print(`FAIL ${b10.failReason}`)
+        }
+        if (b10AdmitMoved !== true) {
+          b10.failReason = b10.failReason ?? `THE ADMIT CONTROL DID NOT HOLD — with an entry whose stamp MATCHES the tab's target (${JSON.stringify(b10TargetDoc)}) and whose values this run never produced (caret offset ${b10AdmitForge.caret.anchor.offset}, view offset ${b10AdmitForge.view.offset}), the activation read caret=${b10Admit.caret === null ? 'null' : JSON.stringify(b10Admit.caret)} caretIdentity=${JSON.stringify(b10AdmitIdentity)} scrollTop=${JSON.stringify(b10Admit.scrollTop)} documentShown=${JSON.stringify(b10Admit.documentShown)} — required: the forged caret's own character at its offset, the box at ${b10AdmitForge.view.offset} and the target's document. WITHOUT this limb the mismatch DROP above proves nothing, because a dead restore answers it identically`
+          b10Print(`FAIL ${b10.failReason}`)
+        }
+      }
+      // ── (9) THE RESTORE OF THE RECORD'S OWN STATE (the forge is re-written back when the limb did read a true
+      // ── entry) and the fixture file's removal — this run must export no store artifact it can remove.
+      let b10RecordRestored = null
+      let b10FixtureRemoved = null
+      if (b10Entry !== null && b10TabId !== null) {
+        b10RecordRestored = await h.cdp.evaluate(`(async()=>{try{const d=window.provident&&window.provident.display;if(!d||typeof d.write!=='function')return {called:false,reason:'window.provident.display.write is not on the bridge'};const r=await d.write({tabId:${JSON.stringify(b10TabId)},entry:${JSON.stringify(b10Entry)}});return {called:true,result:r}}catch(e){return {called:true,threw:String(e&&e.message?e.message:e)}}})()`)
+      }
+      if (b10FixturePath !== null) {
+        // THE FIXTURE LIVES IN THE RUN'S OWN GITIGNORED SCRATCH DIR (`<ROOT>/.live-fixture/`, created with `mkdtempSync` there so
+        // it sits INSIDE the importer's corpus root — see step (1a)), so both the file AND the directory it created are removed
+        // here, and a crash before this line can never put a document fixture in `git status` (`.live-fixture/` is ignored).
+        try {
+          rmSync(b10FixturePath, { force: true })
+          if (b10FixtureDir !== null) rmSync(b10FixtureDir, { recursive: true, force: true })
+          b10FixtureRemoved = true
+        } catch {
+          b10FixtureRemoved = false
+        }
+      }
+      b10Print(`(9) RESTORE — the record's own entry re-written over the forge through the SAME route: ${JSON.stringify(b10RecordRestored)}; the limb's fixture file removed=${b10FixtureRemoved} from its OWN GITIGNORED scratch dir ${JSON.stringify(b10FixtureDir)} (inside the repo root but NEVER at it — \`.gitignore\` covers \`.live-fixture/\`, so nothing stray can land in \`git status\`; the imported document stays in this run's DISPOSABLE store, which the teardown deletes with the scratch HOME)`)
+      // ── (10) THE LIMB'S VERDICT, EVERY CLAUSE NAMED — AND THE TWO RE-GRAINED CLAUSES ARE GRADED IN THEIR OWN RIGHT.
+      // The terms that stood here — §8's `(i)` `assemblyRootUnchanged` and `(ii)` `otherPanesSurvived` — were BORROWED FROM A
+      // PANE-PAINT UNIT and are UNSATISFIABLE on a tab-switch round trip (§6 excludes the switch's own mount BY NAME: a document
+      // activation runs `mountTab` → `mountDocumentStage` → `loadAppGraph`, so the whole assembly is re-authored once per
+      // activation). Their successor claims are `(i')` noReassemblyBeyondTheActivation (exactly two `#wiki-root` re-mints across
+      // the round trip, one per activation, and the restore itself moves nothing) and `(ii')` paneSetAndDocumentAreTheTargets
+      // (the pane-id set before and after is IDENTICAL and the document shown is the tab TARGET's). Both are re-measured above and
+      // both ARE folded into `displayLimbOk`: they are satisfiable by construction and they are what this unit must not break.
+      const b10Clauses = {
+        recordEntryPresent: b10Entry !== null,
+        recordEntryMembersWithinAllowlist: b10AllowlistOk === true,
+        recordTypedTextAbsentFromBytes: b10TypedAbsent === true,
+        caretRestored: b10CaretRestored === true,
+        scrollRestored: b10ScrollRestored === true,
+        exactlyOneSurface: b10ExactlyOne === true,
+        documentShownIsTarget: b10DocShownIsTarget === true,
+        controlHeld: b10ControlHeld === true,
+        admitApplied: b10AdmitMoved === true,
+        noReassemblyBeyondTheActivation: b10RootRemints === 2 && b10RestoreMovesNothing === true,
+        paneSetAndDocumentAreTheTargets: b10PaneSetHeld === true && b10DocShownIsTarget === true,
+      }
+      /** The two RE-GRAINED clauses' own readings, printed beside the clauses so the re-grain's evidence is auditable. */
+      const b10RegrainedReadings = {
+        rootSamples: [b10Before === null ? null : b10Before.root, b10SecondCensus === null ? null : b10SecondCensus.root, b10After === null ? null : b10After.root],
+        rootRemints: b10RootRemints,
+        restoreMovesNothing: b10RestoreMovesNothing,
+        paneSetHeld: b10PaneSetHeld,
+        documentShownIsTarget: b10DocShownIsTarget,
+      }
+      b10.ok = b10.parkReason === null && b10.failReason === null && Object.values(b10Clauses).every((v) => v === true)
+      b10.evidence = `⟨B-10 §8 G8 — THE STAGE-DISPLAY LIMB (assembled app; the ONLY app-green layer; NO new BLOCKS key)⟩ ${b10.lines.join(' | ')} || CLAUSES=${JSON.stringify(b10Clauses)} REGRAINED-READINGS=${JSON.stringify(b10RegrainedReadings)} (the two clauses this round RE-GRAINED from the borrowed assemblyRootUnchanged/otherPanesSurvived: a tab-switch round trip re-authors the whole assembly BY CONSTRUCTION, §6 excludes that mount by name, so the successor claims are "no re-assembly beyond the activation's own" and "the pane SET and the document shown are the target's" — measured, and folded) displayLimbOk=${b10.ok} parkReason=${JSON.stringify(b10.parkReason)} failReason=${JSON.stringify(b10.failReason)}`
+      b10Print(`(10) VERDICT displayLimbOk=${b10.ok} clauses=${JSON.stringify(b10Clauses)} regrainedReadings=${JSON.stringify(b10RegrainedReadings)} parkReason=${JSON.stringify(b10.parkReason)} failReason=${JSON.stringify(b10.failReason)}`)
+      if (b10.ok !== true && b10.parkReason === null && b10.failReason === null) {
+        b10.failReason = `THE LIMB'S CLAUSES DID NOT ALL HOLD (${JSON.stringify(b10Clauses)}) — every false clause above is a reading taken on the assembled app`
+        b10Print(`FAIL ${b10.failReason}`)
+        b10.evidence = `${b10.evidence} || FAIL ${b10.failReason}`
+        b10.ok = false
+      }
+    } catch (b10Thrown) {
+      b10.parkReason = `PRECONDITION-FAILED: the B-10 display limb THREW before it could finish — ${String(b10Thrown && b10Thrown.message ? b10Thrown.message : b10Thrown)} (a DRIVER fault: the app was never given the chance to answer, so this is NOT-DRIVEN and never an app verdict)`
+      b10.ok = false
+      b10.evidence = `⟨B-10 §8 G8 — THE STAGE-DISPLAY LIMB⟩ ${b10.lines.join(' | ')} || NOT-DRIVEN ${b10.parkReason}`
+      try { b10Print(`NOT-DRIVEN ${b10.parkReason}`) } catch { /* the console itself, contained */ }
+    }
+    const displayLimbOk = b10.ok === true && b10.parkReason === null && b10.failReason === null
     const tplLimbEvidence = `⟨B-7 §8 G8 — THE TEMPLATE PANE'S OWN SOURCE, READ INSIDE THE DIRTY WINDOW (assembled app; the ONLY app-green layer; NO new BLOCKS key)⟩ (0) pane ENABLED+EXPANDED through the operator control: path=${tplEnable.path} present=${tplEnable.present} zone:left=${tplEnable.zoneState} (driven BEFORE the window opens: the control sits behind #settings-modal, whose open/close takes focus from #page-edit-surface and would run the page's own commit-on-blur — the block's blur is the ONE release, no second blur is added); BASELINE #wiki-root data-node-id=${JSON.stringify(tplBase.root)} frames=${JSON.stringify((tplBase.frames || []).map((f) => f.pid + '@' + f.nodeId))} #pane-${tplPaneId} x${tplBase.paneFrameCount} zoneRows=${JSON.stringify(tplZonesBefore)} text=${JSON.stringify(String(tplBase.paneText || '').slice(0, 240))}; (1) THE STORE WRITE while the page is DIRTY — ROUTE USED="mcp:code.template.create" zone="b7limb" REPLY VERBATIM=${JSON.stringify(tplCreate.value)} isError=${tplCreate.isError}; (2) THE FIVE READINGS taken BEFORE the block's blur released the queue: (i) assemblyRootUnchanged=${tplRootHeld} (#wiki-root ${JSON.stringify(tplBase.root)} -> ${JSON.stringify(tplAfter.root)}) and pageSurfaceUnchanged=${tplPageSurfaceUnchanged} (#page-edit-surface data-node-id ${JSON.stringify(tplPageBefore.nodeId)} -> ${JSON.stringify(tplPageAfter.nodeId)}, text len/hash ${tplPageBefore.len}/${tplPageBefore.hash} -> ${tplPageAfter.len}/${tplPageAfter.hash}, focus ${JSON.stringify(tplPageBefore.focus)} -> ${JSON.stringify(tplPageAfter.focus)}, caret ${JSON.stringify(tplPageBefore.caret)} -> ${JSON.stringify(tplPageAfter.caret)}); (ii) otherPanesSurvived=${tplOthersSurvived} (${JSON.stringify(tplOthers.map((p) => p.pid + ':marked=' + p.marked + ',nodeIdHeld=' + p.nodeIdHeld))}) — THE SCOPING CLAUSE: the template-editor pane is EXCLUDED from THIS limb's (ii) alone because it MOVES ON PURPOSE here (it is this limb's SUBJECT), and the exclusion is THIS limb's ALONE: B-5's and B-6's own pools are NOT weakened by it — B-5 censuses every frame that stood at ITS baseline (taken BEFORE this limb enables the pane, so the pane is not in it), and B-6's baseline is taken AFTER (so its pool CARRIES the pane, a STRICTER reading) — and NONE is dropped from either; (iii) exactlyOneTemplateFrame=${tplExactlyOne} (before ${tplBase.paneFrameCount} after ${tplAfter.paneFrameCount}) with paneCarriersHeld=${tplCarriersHeld} (before ${JSON.stringify(tplPaneBefore ? tplPaneBefore.carriers : null)} vs after ${JSON.stringify(tplPaneAfter ? tplPaneAfter.carriers : null)}); (iv) paneRemintedExactlyOnce=${tplRemintedOnce} (observed re-mints=${tplRemintCount}, noFurtherRemint=${tplNoFurtherRemint}; frame node id ${JSON.stringify(tplPaneBefore ? tplPaneBefore.nodeId : null)} -> ${JSON.stringify(tplPaneAfter ? tplPaneAfter.nodeId : null)} settled ${JSON.stringify(tplSettledFrame ? tplSettledFrame.nodeId : null)}); (v) zoneRowsNowNameIt=${tplZoneRowsNowNameIt} (${JSON.stringify(tplZonesBefore)} -> ${JSON.stringify(tplZonesAfter)}) WHILE the queued requestRebuild('template') provably has NOT run: the typed dirty text "${dirtyMarker}" is STILL in the page-edit surface=${tplSurfaceStillDirty} and STILL ABSENT from the store (rag.get_document read-back)=${tplStoreStillLacksTyped} => queuedRebuildUnrun=${tplQueuedRebuildUnrun}; (3) RESTORE — mcp:code.template.delete zone="b7limb" isError=${tplDelete.isError}, zone rows read back ${JSON.stringify(tplZonesRestored)} zoneGone=${tplZoneGone}; pane re-disabled through its OWN operator control path=${tplDisablePath} (${JSON.stringify(tplVisBefore)} -> ${JSON.stringify(tplVisAfter)}) paneDisabled=${tplPaneDisabled} => TEMPLATE_LIMB_OK=${tplLimbOk}; PARK REASON=${tplParkReason === null ? 'null' : tplParkReason}`
     // THE DRIVER PRECONDITIONS, CLASSIFIED AND NAMED (never an app FAIL, never smoothed into a pass).
     let docNavParkReason = null
@@ -10796,12 +11487,18 @@ const BLOCKS = {
     else if (edgeCreate.failure !== null) linksParkReason = driverFailureReason(edgeCreate.failure.kind, edgeCreate.failure.detail, edgeCreate.failure.extra).marker
     const linksLimbOk = linksParkReason === null && controlHeld && assemblyRootUnchanged && otherPanesSurvived &&
       linksCarriersHeld && linksReminted && exactlyOneLinksFrame && linksContentChanged && linksLineNamed && linksBaselineWasNone
-    const okAll = ok && linksLimbOk && docNavLimbOk && tplLimbOk && tplRestoreOk && restoreOk
+    // ⟨Unit `B-10` §8 — **THE DISPLAY LIMB GATES THIS ROW TOO.**⟩ `displayLimbOk` is the limb's OWN AND over the
+    // clauses it printed (the record's entry present and content-free, the caret and the scroll restored off the
+    // record's BYTES, the assembly limbs, the target's document shown, and the CONTROL's drop). A limb that could
+    // not be driven is a NAMED park (`b10.parkReason`) and never a silent skip; a limb whose clauses did not hold is
+    // a FAIL with its exact clause set (`b10.failReason`). Both are folded HERE, the same way the landed `B-5`,
+    // `B-6` and `B-7` limbs are — a gate that cannot fail is not evidence.
+    const okAll = ok && linksLimbOk && docNavLimbOk && tplLimbOk && tplRestoreOk && restoreOk && displayLimbOk
     const linksLimbEvidence = `⟨B-5 §8 G8 — THE D-24 ASSEMBLED-APP LIMB (assembled app; the ONLY app-green layer)⟩ (0) pane ENABLED+EXPANDED through the operator control: path=${linksEnable.path} present=${linksEnable.present} zone:left=${linksEnable.zoneState}; QUIET GATE after the enable (mark, settle, re-read with no store write) held=${quietHeld} frames=${JSON.stringify(quietFrames)}; CONTROL (the edgeIds:[] shape, a SECOND real content-only commit driven now that the pane is mounted — the block's OWN typed commit landed before the pane existed, a driver sequencing fact): caret=${JSON.stringify(controlCaret.ok || false)} typed "${controlMarker}" blur(warning=${controlBlur.warning}) store read-back containsMarker=${controlCommitted} => frameHeld=${controlFrameHeld} textHeld=${controlTextHeld} rootHeld=${controlRootHeld} otherFramesSurvived=${controlOtherSurvived} (${JSON.stringify(controlOthers.map((p) => p.pid + ':marked=' + p.marked + ',nodeIdHeld=' + p.nodeIdHeld))}) CONTROL_HELD=${controlHeld} (the control's claim is the crosslinks pane's OWN stillness; otherFramesSurvived is printed as its own reading, not folded in — a content-only commit legitimately re-authors a SIBLING pane) (frame node id "${controlPaneBefore ? controlPaneBefore.nodeId : '?'}" -> "${controlPaneAfter ? controlPaneAfter.nodeId : '?'}"; text "${controlMark.paneText}" -> "${controlRead.paneText}"); (c) BASELINE #wiki-root data-node-id="${base.root}" frames=${JSON.stringify((base.frames || []).map((f) => f.pid + '@' + f.nodeId))} #pane-${linksPaneId} x${base.paneFrameCount} text="${base.paneText}" ((none) present=${linksBaselineWasNone}); (d) SUBJECT read off the DOM #zone:main [data-doc-head]=${JSON.stringify(subjectRead)} => subjectNodeId=${subjectNodeId}, SOURCE from ANOTHER document sourceDoc=${sourceDoc} sourceNodeId=${sourceNodeId} (candidates ${JSON.stringify(sourceTried)}); (e) edit.set_edge REPLY VERBATIM=${JSON.stringify(edgeCreate.read ? edgeCreate.read.value : null)} isError=${edgeCreate.read ? edgeCreate.read.isError : 'no-call'} edgeId=${edgeCreate.edgeId}; (f) THE FIVE LIMBS read off the SETTLED app: (i) assemblyRootUnchanged=${assemblyRootUnchanged} (#wiki-root "${base.root}" -> "${after.root}"); (ii) otherPanesSurvived=${otherPanesSurvived} (${JSON.stringify(otherPanes.map((p) => p.pid + ':marked=' + p.marked + ',nodeIdHeld=' + p.nodeIdHeld))}); (iii) paneReminted=${linksReminted} with paneCarriersHeld=${linksCarriersHeld} (before ${carriersOf(linksBefore)} vs after ${carriersOf(linksAfter)}); (iv) exactlyOneCrosslinksFrame=${exactlyOneLinksFrame} (before ${base.paneFrameCount} after ${after.paneFrameCount}); (v) paneContentChanged=${linksContentChanged} ("${base.paneText}" -> "${after.paneText}") namesTheNewEdge=${linksLineNamed} expectedLine=${JSON.stringify(expectedLine)} renderedLinks=${JSON.stringify(after.paneLinks)}; (g) RESTORE: the CONTRACTED route MCP edit.batch REPLY VERBATIM=${JSON.stringify(edgeRemove.mcp)} and the app's OWN batch channel window.provident.edit.batch REPLY VERBATIM=${JSON.stringify(edgeRemove.bridge)} edgeId=${edgeCreate.edgeId} removedClearedTheLine=${linksLineCleared} (pane text after the delete "${linksTextAfterRestore}"); pane visibility re-disabled through its own control: before=${visBeforeDisable} path=${disablePath} after=${visAfterDisable} restored=${paneDisabledRestored}; PARK REASON=${JSON.stringify(linksParkReason)} (a driver precondition is PARKED by name — never an app FAIL, never a pass)`
-    const evidenceFull = `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; documentId=${documentId} surface box=${JSON.stringify(st.box)}; caret placed at block ${idx} (${JSON.stringify(placed)}) => ${JSON.stringify(selBefore)}; REAL typed text "${marker}" landed in the surface=${typed.hasMarker} (surface text len ${st.len}->${typed.len}); REAL blur (page-commit seam) => ${JSON.stringify(blur)}; STORE read-back rag.get_document changed=${storeChanged} containsMarker=${storeHasMarker}; rendered DOM containsMarker=${domHasMarker} (store/DOM AGREE=${storeHasMarker === domHasMarker}); journal BEFORE=${JSON.stringify(journalPreDetail)} (undoDepth ${journalBefore}) AFTER=${JSON.stringify(journalPostDetail)} (undoDepth ${journal && journal.undoDepth}, delta=${journalDelta}) — the ONE-batch claim's store-side half; commit-warning present=${blur.warning} (kind=${blur.warningKind}); ${linksLimbEvidence}; ${docNavLimbEvidence}; ${tplLimbEvidence}`
-    const linksAssertion = 'A real typed edit + blur commits to the store in ONE batch: the `rag.get_document` read-back and the rendered DOM agree on the typed text, and an unrelated block is byte-unchanged — AND (unit `B-5` §8 / D-24, gate `G8`) a NEWLY DETECTED BACKLINK repaints the `crosslinks` pane (title `Links`, `.pane-frame[data-pane-id="crosslinks"]`) ITSELF and ALONE: `#wiki-root` and every OTHER pane frame survive with their per-run mark, exactly ONE `#pane-crosslinks` exists, the pane frame is re-minted with its carriers held, and the pane named list MOVES from `(none)` to a line naming the new edge — AND (unit `B-6` §8, gate `G8`) a document CREATED while a page edit is DIRTY repaints the `doc-nav` pane (title `Documents`, `.pane-frame[data-pane-id="doc-nav"]`) ITSELF and ALONE: with the uncommitted typed text still in the surface, `#wiki-root` and every OTHER pane frame survive with their per-run mark, exactly ONE `#pane-doc-nav` exists, the pane frame is re-minted with its carriers held, and the pane row set MOVES to NAME the new document — a reading the queued re-derive cannot produce, and the restored state no longer names it'
+    const evidenceFull = `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; documentId=${documentId} surface box=${JSON.stringify(st.box)}; caret placed at block ${idx} (${JSON.stringify(placed)}) => ${JSON.stringify(selBefore)}; REAL typed text "${marker}" landed in the surface=${typed.hasMarker} (surface text len ${st.len}->${typed.len}); REAL blur (page-commit seam) => ${JSON.stringify(blur)}; STORE read-back rag.get_document changed=${storeChanged} containsMarker=${storeHasMarker}; rendered DOM containsMarker=${domHasMarker} (store/DOM AGREE=${storeHasMarker === domHasMarker}); journal BEFORE=${JSON.stringify(journalPreDetail)} (undoDepth ${journalBefore}) AFTER=${JSON.stringify(journalPostDetail)} (undoDepth ${journal && journal.undoDepth}, delta=${journalDelta}) — the ONE-batch claim's store-side half; commit-warning present=${blur.warning} (kind=${blur.warningKind}); ${linksLimbEvidence}; ${docNavLimbEvidence}; ${tplLimbEvidence}; ${b10.evidence}`
+    const linksAssertion = 'A real typed edit + blur commits to the store in ONE batch: the `rag.get_document` read-back and the rendered DOM agree on the typed text, and an unrelated block is byte-unchanged — AND (unit `B-5` §8 / D-24, gate `G8`) a NEWLY DETECTED BACKLINK repaints the `crosslinks` pane (title `Links`, `.pane-frame[data-pane-id="crosslinks"]`) ITSELF and ALONE: `#wiki-root` and every OTHER pane frame survive with their per-run mark, exactly ONE `#pane-crosslinks` exists, the pane frame is re-minted with its carriers held, and the pane named list MOVES from `(none)` to a line naming the new edge — AND (unit `B-6` §8, gate `G8`) a document CREATED while a page edit is DIRTY repaints the `doc-nav` pane (title `Documents`, `.pane-frame[data-pane-id="doc-nav"]`) ITSELF and ALONE: with the uncommitted typed text still in the surface, `#wiki-root` and every OTHER pane frame survive with their per-run mark, exactly ONE `#pane-doc-nav` exists, the pane frame is re-minted with its carriers held, and the pane row set MOVES to NAME the new document — a reading the queued re-derive cannot produce, and the restored state no longer names it — AND (unit `B-10` §8, gate `G8`) `D-23`\'s record GETS ITS FIRST WRITER AND RESTORES AT APP GRAIN: with a real caret placed in `#page-edit-surface`, real text typed and the stage\'s own box really scrolled, a tab switch AWAY and a REAL CLICK BACK restores the caret and the scroll the `display` family holds in `<userData>/provident-profile.json` — the entry on disk names ONLY `{documentId, caret, view}`, the typed text occurs NOWHERE in that file\'s bytes, `(i\')` NO RE-ASSEMBLY BEYOND THE STAGE ACTIVATION\'S OWN (the switch\'s `mountTab` is the only re-author of the round trip — `#wiki-root` re-mints exactly once per activation, 2 across the round trip, and a quiet re-read after the return shows the restore itself moves nothing), `(ii\')` THE PANE SET AND THE DOCUMENT SHOWN ARE THE TARGET\'S (the pane frames are re-authored by that same mount, so the claim that survives is that the pane ids present before and after are IDENTICAL and the document on screen is the tab target\'s), exactly ONE `#page-edit-surface` exists, the stage shows the tab TARGET\'s document — AND, in the SAME run, an ADMIT control first proves the restore APPLIES an entry it admits (the SAME write route forging a caret offset and a view offset no capture in this run produced, under a stamp that MATCHES the tab\'s target: the caret lands at that record\'s own character and the box at that offset), and THEN, with the entry\'s `documentId` FORGED to a DIFFERENT document through the same route, the same round trip reads NEITHER forged member applied (no caret at the forged offset, the box not at the forged offset — claimed as that, NOT as "no caret on screen", which the app\'s own carrier replay puts there) and STILL the target\'s document: the stamp-mismatch DROP'
     return rowResult({row:'U-EDIT-1-LIVE-7',dclass:'D-state'}, linksAssertion, evidenceFull,
-      { path: 'cdp', ok: okAll, surface, park: linksParkReason !== null || docNavParkReason !== null || tplParkReason !== null, parkReason: linksParkReason ?? docNavParkReason ?? tplParkReason, extra: { b5LinksLimb: { assemblyRootUnchanged, otherPanesSurvived, paneReminted: linksReminted, paneCarriersHeld: linksCarriersHeld, exactlyOneCrosslinksFrame: exactlyOneLinksFrame, paneContentChanged: linksContentChanged, namesTheNewEdge: linksLineNamed, controlHeld, restoreOk }, b6DocNavLimb: { assemblyRootUnchanged: dnRootHeld, otherPanesSurvived: dnOthersSurvived, paneReminted: dnReminted, paneCarriersHeld: dnCarriersHeld, exactlyOneDocNavFrame: dnExactlyOne, rowSetMoved: dnRowsChanged, namesTheNewDocument: dnNamesTheNewDocument, dirtyWindowHeldAcrossThePaint: dnSurfaceTextHeld, namedAfterTheRelease: dnNamedSettled, rowGoneAfterRestore: dnRowGone, restoreOk: docNavRestoreOk, importedDocumentId: dnNewDocId }, b7TemplateLimb: { assemblyRootUnchanged: tplRootHeld, pageSurfaceUnchanged: tplPageSurfaceUnchanged, otherPanesSurvived: tplOthersSurvived, exactlyOneTemplateFrame: tplExactlyOne, paneReminted: tplRemintedOnce, paneCarriersHeld: tplCarriersHeld, zoneRowsNowNameIt: tplZoneRowsNowNameIt, queuedRebuildUnrun: tplQueuedRebuildUnrun, zoneGone: tplZoneGone, paneDisabledAfterRestore: tplPaneDisabled, limbOk: tplLimbOk, restoreOk: tplRestoreOk, parkReason: tplParkReason } } })
+      { path: 'cdp', ok: okAll, surface, park: linksParkReason !== null || docNavParkReason !== null || tplParkReason !== null || b10.parkReason !== null, parkReason: linksParkReason ?? docNavParkReason ?? tplParkReason ?? b10.parkReason, extra: { b5LinksLimb: { assemblyRootUnchanged, otherPanesSurvived, paneReminted: linksReminted, paneCarriersHeld: linksCarriersHeld, exactlyOneCrosslinksFrame: exactlyOneLinksFrame, paneContentChanged: linksContentChanged, namesTheNewEdge: linksLineNamed, controlHeld, restoreOk }, b6DocNavLimb: { assemblyRootUnchanged: dnRootHeld, otherPanesSurvived: dnOthersSurvived, paneReminted: dnReminted, paneCarriersHeld: dnCarriersHeld, exactlyOneDocNavFrame: dnExactlyOne, rowSetMoved: dnRowsChanged, namesTheNewDocument: dnNamesTheNewDocument, dirtyWindowHeldAcrossThePaint: dnSurfaceTextHeld, namedAfterTheRelease: dnNamedSettled, rowGoneAfterRestore: dnRowGone, restoreOk: docNavRestoreOk, importedDocumentId: dnNewDocId }, b7TemplateLimb: { assemblyRootUnchanged: tplRootHeld, pageSurfaceUnchanged: tplPageSurfaceUnchanged, otherPanesSurvived: tplOthersSurvived, exactlyOneTemplateFrame: tplExactlyOne, paneReminted: tplRemintedOnce, paneCarriersHeld: tplCarriersHeld, zoneRowsNowNameIt: tplZoneRowsNowNameIt, queuedRebuildUnrun: tplQueuedRebuildUnrun, zoneGone: tplZoneGone, paneDisabledAfterRestore: tplPaneDisabled, limbOk: tplLimbOk, restoreOk: tplRestoreOk, parkReason: tplParkReason }, b10DisplayLimb: { displayLimbOk, recordEntry: b10Entry, recordEntryMembersWithinAllowlist: b10AllowlistOk, recordTypedTextAbsentFromBytes: b10TypedAbsent, caretBefore: b10Before ? b10Before.caret : null, caretAfterTabRoundTrip: b10After ? b10After.caret : null, caretRestored: b10CaretRestored, caretIdentity: b10CaretIdentity, scrollBefore: b10Before ? b10Before.scrollTop : null, scrollAfterTabRoundTrip: b10After ? b10After.scrollTop : null, scrollRestored: b10ScrollRestored, admitControl: { applied: b10AdmitMoved, entryOnDisk: b10AdmitEntryOnDisk, caretAfterAdmit: b10Admit ? b10Admit.caret : null, scrollAfterAdmit: b10Admit ? b10Admit.scrollTop : null }, controlDrop: { neitherForgedMemberApplied: b10ControlHeld, caretAfterControlRestore: b10ControlCaret, scrollAfterControlRestore: b10ControlScroll, documentShownControl: b10ControlDocShown }, assemblyRootUnchanged: b10RootHeld, otherPanesSurvived: b10OthersSurvived, noReassemblyBeyondTheActivation: b10RootRemints === 2 && b10RestoreMovesNothing === true, rootRemints: b10RootRemints, restoreMovesNothing: b10RestoreMovesNothing, paneSetHeld: b10PaneSetHeld, exactlyOneSurface: b10ExactlyOne, documentShown: b10After ? b10After.documentShown : null, targetDocumentId: b10TargetDoc, documentShownIsTarget: b10DocShownIsTarget, controlHeld: b10ControlHeld, caretAfterControlRestore: b10ControlCaret, scrollAfterControlRestore: b10ControlScroll, documentShownControl: b10ControlDocShown, recordPath: b10ProfilePath, parkReason: b10.parkReason, failReason: b10.failReason, lines: b10.lines } } })
   },
 
   // ---- §8.3 item 3 — a FAILED commit is USER-VISIBLE (painted, typed) AND
@@ -12347,7 +13044,23 @@ async function main(argv) {
       }
       console.error(`[live-drive] FIXTURE PROBES (LIVE READINGS, §18.1/§18.6 clause 3 — the declared fixtures' own probes, taken AFTER the materialisation${opt.connect === true ? '' : '/import and the root-text write'} and BEFORE any block, at the pre-gesture read point${opt.connect === true ? '; --connect: the import was SKIPPED, so this store is the RUNNING app\'s (§4 S-5)' : ''}): ${JSON.stringify(probeReadings)} — ${probeReadings.map((p) => `'${p.fixtureName}': present=${p.present} at resolved=${p.resolved} via ${p.tool}`).join(' · ')}; the \`dom:\` reading is recorded as a READING, never as a pass (§18.2 clauses 4/5)`)
     }
-    const h = { mcp, cdp, groups, mcpTool, mcpRead: (name, args = {}) => mcpToolResult(mcp, name, args) }
+    // ⟨Unit `B-10` §8 — **THE DISPOSABLE HOME REACHES THE BLOCKS, READ-ONLY.**⟩ The display record's carrier is
+    // `<userData>/provident-profile.json` (main's ONE store construction, `app.getPath('userData')`), and the
+    // `B-10` limb grades THE RECORD'S OWN BYTES — not the app's intent — so the block must be able to find that
+    // file. In SPAWN mode the app boots with `HOME=home` (the disposable scratch this run minted) and Electron's
+    // own default userData is `<HOME>/.config/<package name>`; `provident-electron` is this repo's `package.json`
+    // `name`, the same root this driver already writes the operator store registry into. In `--connect` mode the
+    // running app owns ITS userData, which is outside this harness's lifecycle — so the value is `null` there and
+    // the limb reports that as its own NOT-DRIVEN cause rather than guessing a path (`RCA-11`).
+    const h = {
+      mcp,
+      cdp,
+      groups,
+      mcpTool,
+      mcpRead: (name, args = {}) => mcpToolResult(mcp, name, args),
+      homeDir: opt.connect === true ? null : home,
+      userDataDir: opt.connect === true ? null : join(home, '.config', 'provident-electron'),
+    }
     const names = opt.block === 'all' ? Object.keys(BLOCKS) : opt.block.split(',').map((s) => s.trim()).filter(Boolean)
     // §3.5/§3.6 — the O-0 run context: the EXECUTING bundle identity (served vs
     // on-disk) and the OBSERVED corpus census are read ONCE, before the block loop,

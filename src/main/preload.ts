@@ -8,7 +8,7 @@ import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_BOOT_READY, IPC_SECURITY_GET, IPC
 import type { ContentWindowTemplate, TemplateSource, TemplateVerdict } from './template-store.js'
 import type { BatchOp, BatchResult, RagNodeChild } from './rag-store.js'
 import type { EngineRagResult, HealthReport, EngineRagQueryOptions } from './engine-rag-store.js'
-import { DISPLAY_CHANGED, DISPLAY_READ, STORE_FILE_GET, STORE_FILE_PUT } from './store-channels.js'
+import { DISPLAY_CHANGED, DISPLAY_READ, DISPLAY_WRITE, STORE_FILE_GET, STORE_FILE_PUT } from './store-channels.js'
 
 export interface ModuleBridgeResult {
   corrupt: boolean
@@ -312,15 +312,19 @@ export interface ProvidentBridge {
     onFileChanged(handler: () => void): () => void
   }
   /** Unit `B-2` `display-wire` §4 (`docs/L1/unit-b-2-display-wire.md`) — **THE DISPLAY CROSSING'S BRIDGE MEMBER: ONE top-level
-   *  key with exactly TWO members, and NEITHER is a sender.**
+   *  key whose members are the read, the subscriber and ONE sender.**
    *
    *  `read` is a REQUEST (`invoke`/`handle`): it answers the record's own reading or the DECLARED `null`, and nothing throws.
    *  `onChanged` is the SUBSCRIBER: ONE registration on the push channel, whose listener calls its handler at **ARITY ZERO
    *  and with NOTHING** — the push carries no value, no address and no reading (`D-24`, `forking.md` §2.5), so the only
    *  correct answer to it is the caller's own re-read. It returns the withdrawal, and the withdrawal removes the SAME listener.
    *
-   *  **THERE IS NO `commit`, `write`, `put` or sender member**: the write route is `B-10`'s, and a member set of exactly
-   *  `{read, onChanged}` is what this unit's bridge census pins.
+   *  **`write` IS UNIT `B-10`'s SENDER** (`docs/L1/unit-b-10-stage-display-state.md` §5, taken under §9 `O-1`): `B-2` reserved
+   *  the write route for that unit and its *"There is NO `commit`, `write`, `put` or sender member"* was the claim of the unit
+   *  that did NOT own the route. It is ONE member with ONE job — a REQUEST (`invoke`/`handle`) over its own channel name — and
+   *  it is **declared on ONE line as this realm's STRUCTURAL TWIN of the record's `DisplayWriteAnswer`**: the payload is the
+   *  ADDRESS plus the WHOLE ENTRY (`{ tabId, entry }`), the answer is `Promise<unknown>` because nothing here judges a verdict,
+   *  and **there is no `put`/`commit` alias and no second sender** — the member set is exactly `{read, onChanged, write}`.
    *
    *  **`read`'s type is this realm's OWN STRUCTURAL TWIN of the reading — `Promise<Record<string, unknown> | null>` — never an
    *  import from the renderer's `display-client.ts` and never one from `src/main/record-engine/`** (the `SecurityWriteReceipt`
@@ -330,6 +334,7 @@ export interface ProvidentBridge {
   display: {
     read(): Promise<Record<string, unknown> | null>
     onChanged(handler: () => void): () => void
+    write(payload: { tabId: string; entry: unknown }): Promise<unknown>
   }
 }
 
@@ -746,6 +751,13 @@ const bridge: ProvidentBridge = {
       return () => {
         ipcRenderer.removeListener(DISPLAY_CHANGED, listener)
       }
+    },
+    // ⟨Unit `B-10` §5 — **THE SENDER, AND THIS IS THE REALM'S ONLY WAY TO WRITE A DISPLAY ENTRY.**⟩ ONE `invoke` over the F-8
+    // constant (`DISPLAY_WRITE` is imported, never re-spelled), carrying the address and the whole entry, and answering whatever
+    // main answered — the record's own verdict, or the DECLARED `null` on a degraded boot. Nothing is judged, wrapped or retried
+    // here, and a transport failure is the caller's (the client turns it into its `null` arm).
+    write(payload: { tabId: string; entry: unknown }): Promise<unknown> {
+      return ipcRenderer.invoke(DISPLAY_WRITE, payload)
     },
   },
 }

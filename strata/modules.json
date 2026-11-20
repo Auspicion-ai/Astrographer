@@ -43,7 +43,7 @@
         "tests/unit/record-engine",
         "tests/integration/record-engine"
       ],
-      "endpoints": 7
+      "endpoints": 9
     },
     {
       "name": "gnosis-changes",

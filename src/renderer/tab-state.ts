@@ -5,6 +5,18 @@
 // shell strip and the MCP `provident.focus` tool both call (the shared
 // application-code focus seam — W2-Q12 parity). Mirrors `layout-state.ts`'s
 // `default*`/`coerce*`/`VERSION` convention for the C9 carrier slice.
+//
+// ⟨Unit `B-10` `stage-display-state` (`docs/L1/unit-b-10-stage-display-state.md` §3, §9 `O-2`) — **THE STAMP RULE, AND ITS
+// HOME IS HERE.**⟩ Two PURE, TOTAL predicates carry the whole of §3: `displayEntryFor(target, held)` is the CAPTURE's law
+// (only a `document`-target tab has an entry — `DisplayEntry.documentId` is a required non-empty string, so a
+// `search`/`graph`/`template`/`other` tab cannot be stated without spelling the tab id into `documentId`, which is the
+// contract's REFUSED alternative), and `displayEntryAdmitsTab(entry, target)` is the RESTORE's law (`true` IFF the target is
+// a `document` target AND `entry.documentId === target.documentId`). **THE TARGET DECIDES WHICH DOCUMENT IS SHOWN; THE STAMP
+// ONLY IDENTIFIES IT** (`ASM-B-2`): a `false` is a DROP — no caret, no scroll, and the document on screen is still the
+// target's. The payload types are imported as TYPES ONLY from the family's own PURE module (the direction
+// `display-client.ts` already takes), so no new runtime edge and no `src/shared/` carrier is born here (`ASM-B10-3`).
+
+import type { DisplayCaret, DisplayEntry, DisplayView } from '../main/record-engine/display-shape.js'
 
 /** The v1 active kinds are `document` + `search`; `graph`/`template` are
  *  declared but PARKED (F9 placeholder until unparked). */
@@ -358,3 +370,68 @@ export function ensureFirstTab(state: TabState, ctx: TabDefaultContext): TabStat
   const entry = makeEntry(state, target ?? { ...TAB_LANDING })
   return { version: TAB_STATE_VERSION, open: [entry], activeId: entry.id, order: [entry.id] }
 }
+
+// ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// ⟨Unit `B-10` §3 — THE STAMP RULE (§9 `O-2`'s two new `shell-chrome` exports)⟩ PURE, TOTAL, and the ONE place the rule lives:
+// **THE TARGET DECIDES WHICH DOCUMENT IS SHOWN; THE STAMP ONLY IDENTIFIES IT** (`ASM-B-2`).
+// ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** **WHAT A CAPTURE MAY CARRY — the two members §2/§3 let the tab hold in memory**: the caret the operator left in the page
+ *  surface and the view the stage last settled at. Both are OPTIONAL because both absences are MEANINGFUL (`display-shape.ts`'s
+ *  own rule: absent `caret` is no caret saved, absent `view` is no scroll saved). */
+export interface DisplayHeldState {
+  readonly caret?: DisplayCaret
+  readonly view?: DisplayView
+}
+
+/** **THE CAPTURE'S LAW (§3): only a `document`-target tab has an entry, and its `documentId` IS THE TARGET'S DOCUMENT.**
+ *
+ *  THE TARGET DECIDES; THE STAMP ONLY IDENTIFIES. The tab's target (`ASM-B-2`: `OperatorSettings.tabs.open[].target`) is the
+ *  single authority on which document the tab shows, so the entry's stamp is DERIVED from it and never merged from the held
+ *  reading — a held entry that names another document cannot make this tab claim it. A `search`/`graph`/`template`/`other`
+ *  target answers `null` and the capture writes NOTHING for it, because `DisplayEntry.documentId` is a required NON-EMPTY
+ *  string and the only way to state such a tab would be to spell the tab's own id into the stamp — the contract's REFUSED
+ *  alternative, which would make the stamp a second name for the tab's identity and would restore a document that is not the
+ *  tab's. `held: null` is the fresh-tab arm: the entry states its document and carries no position.
+ *
+ *  TOTAL: a malformed/absent target, a non-record `held` and every member of the wrong type are each answered rather than
+ *  thrown on, and the admitted members are CARRIED UNCHANGED (the family's parse judges a value; this predicate never coerces
+ *  one). PURE: it reads its two arguments and nothing else. */
+export function displayEntryFor(target: TabTarget, held: DisplayHeldState | null | undefined): DisplayEntry | null {
+  if (target === null || typeof target !== 'object' || target.kind !== 'document') return null
+  const documentId = target.documentId
+  if (typeof documentId !== 'string' || documentId === '') return null
+  const entry: { documentId: string; caret?: DisplayCaret; view?: DisplayView } = { documentId }
+  if (held !== null && typeof held === 'object') {
+    const heldRecord = held as { caret?: unknown; view?: unknown }
+    // CARRIED, NEVER JUDGED: an absent (or own-`undefined`) member is the lawful absence, and any other value is handed on for
+    // the family's ONE parse to admit or refuse — dropping a malformed member here would turn a refusal into a silent absence.
+    if (heldRecord.caret !== undefined && heldRecord.caret !== null) entry.caret = heldRecord.caret as DisplayCaret
+    if (heldRecord.view !== undefined && heldRecord.view !== null) entry.view = heldRecord.view as DisplayView
+  }
+  return entry
+}
+
+/** **THE RESTORE'S LAW (§3), AND IT IS THE WHOLE STAMP RULE**: `true` IFF the target is a `document` target AND the entry's
+ *  `documentId` is that same document's id.
+ *
+ *  THE TARGET DECIDES; THE STAMP ONLY IDENTIFIES — so `false` is a **DROP**: no caret is applied, no scroll is applied, and the
+ *  document on screen is STILL THE TARGET'S. A mismatched stamp NEVER redirects the shown document, and every non-`document`
+ *  target is `false` by the same clause (a tab that cannot state an entry cannot be restored from one). An absent/malformed
+ *  entry is `false` as well, which is why the caller's `no-entry` arm and this `false` are both declared drops.
+ *
+ *  TOTAL and PURE: no throw at any argument (a hostile accessor inside `entry` is contained as `false`), and nothing but its
+ *  two arguments is read. */
+export function displayEntryAdmitsTab(entry: DisplayEntry | null | undefined, target: TabTarget): boolean {
+  if (target === null || typeof target !== 'object' || target.kind !== 'document') return false
+  if (entry === null || entry === undefined || typeof entry !== 'object') return false
+  let documentId: unknown
+  try {
+    documentId = (entry as { documentId?: unknown }).documentId
+  } catch {
+    // a throwing accessor is not a stamp: the entry cannot be admitted by a value nobody can read
+    return false
+  }
+  return typeof documentId === 'string' && documentId !== '' && documentId === target.documentId
+}
+

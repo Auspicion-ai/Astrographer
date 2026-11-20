@@ -1,7 +1,7 @@
 // src/renderer/renderer.ts — browser entry for the Electron renderer.
 // Bootstraps the provident-ssr producing process into #app and serves the
 // MCP-facing operations over the preload bridge (main process = MCP server).
-import { Runtime } from './runtime.js'
+import { Runtime, type DisplayCaptureReport } from './runtime.js'
 import { SidebarPanes } from './sidebar-panes.js'
 import { GnosisPanes } from './gnosis-panes.js'
 import { GnosisCrudPanes } from './gnosis-crud-panes.js'
@@ -24,6 +24,10 @@ import { createDisplayClient, type DisplayClient, type DisplayReading, type Disp
 import { type LayoutState, type LayoutZoneName } from './layout-state.js'
 import { applyLayoutToRoot } from './layout-vars.js'
 import { TabStrip } from './tab-strip.js'
+// ⟨Unit `B-10` `stage-display-state` §3/§9 `O-2` — THE STAMP LAW, INJECTED RATHER THAN RE-SPELLED.⟩ The two PURE predicates
+// `tab-state.ts` owns are handed to the capture and the restore through their `deps`, so the shipped behaviour judges a stamp by
+// the ONE law while the markered region keeps its own spelling for the extract-and-drive harness (which injects nothing).
+import { displayEntryAdmitsTab, displayEntryFor, type TabEntry } from './tab-state.js'
 import type { RpcRequest, RpcReply } from '../shared/types.js'
 // ⟨`U-ZONE-REPLACEMENT` / `PD-UI-14` — §3 rows 4/5, §3.4: THE GESTURE SESSION IS THE
 // VENDORED `gesture-session.ts`, ITS ELEMENT-BACKED SOURCE IS BUILT ON THE VENDORED
@@ -1467,6 +1471,666 @@ function memberOf(bridge: DisplayBridge | null | undefined): DisplayBridgeMember
   }
 }
 
+// ⟦B-10-STAGE-DISPLAY⟧
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// Unit `B-10` `stage-display-state` (`docs/L1/unit-b-10-stage-display-state.md` §2, §3, §6) — **THE CAPTURE AND THE RESTORE, IN ONE
+// MARKERED REGION AT MODULE SCOPE.**
+//
+// WHY A REGION AND NOT MERELY TWO FUNCTIONS: §6 makes the SHIPPED body **EXTRACTABLE AND DRIVABLE** — the unit's rows cut these
+// bytes out of this file, compile them with the repo's own `esbuild` and DRIVE them (the instrument `B-2` §5 (c) established), so
+// an absent region FAILS a row rather than skipping it. That is only honest if the region is **SELF-CONTAINED OVER INJECTED
+// COLLABORATORS**: it reaches NO other module-scope binding of this file — not the runtime, not the host, not the store, not even a
+// constant — because the harness supplies none of them. Every collaborator arrives in `deps`, every lookup is contained, and every
+// function here is TOTAL (no throw, at any argument).
+//
+// WHAT EACH HALF MAY DO, AND WHAT IT MAY NOT (`ASM-B10-1`, §2, §6): the CAPTURE reads the report the runtime seam settled and
+// writes the record — **it NEVER repaints**, or every save would be a pane update and a dead capture would be indistinguishable
+// from a live one. The RESTORE applies a POSITION — the caret into `#page-edit-surface` (path re-resolved, offsets CLAMPED) and the
+// scroll into the stage's own box — and it **NEVER re-assembles** anything: `INV-E` is 0 `loadAppGraph` / 0 `mountOperator` / 0
+// `refresh()` on the restore's own turn, and the tab switch's own mount is the app's pre-existing behaviour, EXCLUDED BY NAME.
+// **NEITHER HALF WRITES DOCUMENT CONTENT** (D-23): the entry is the tab's document stamp and, at most, a caret and a view.
+//
+// THE STAMP RULE, SAID ONCE HERE TOO (§3): **the TARGET decides which document is shown; the entry's stamp only IDENTIFIES it.**
+// `tab-state.ts` owns that law (`displayEntryFor`/`displayEntryAdmitsTab`, PURE and TOTAL), the wiring INJECTS it through
+// `deps.law`, and the two local predicates below are the SAME rule spelled inside the region because the region may not reach an
+// import — the extract-and-drive instrument supplies no law, so the fallback is the arm it drives. The `(S3·alias)` row is what
+// keeps the two spellings from drifting: what the capture builds is what the restore admits.
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+/** **THE SURFACE'S SUBJECT**, re-added to a caret on its way into the controller: `edit-controller.ts`'s FS2 arm
+ *  (`:276-279`) DROPS a `rich` caret whose `ragId` is not this id, so the record's `DisplayCaret` — the controller's own state
+ *  MINUS the subject, which the entry's stamp carries once — is restored unchanged only if the priming re-states the subject. */
+const STAGE_DISPLAY_SUBJECT = 'page-edit-surface'
+
+/** The stage's OWN scroll container (`ASM-B10-2`, `src/renderer/index.html`'s `{ overflow: auto }` clause). */
+const STAGE_DISPLAY_STAGE_SELECTOR = '#app [id="zone:main"]'
+
+/** The stage's authored id, the second lookup for the same element. */
+const STAGE_DISPLAY_STAGE_ID = 'zone:main'
+
+/** The three pinned write events, and the MOVE which is `null` — **`DISPLAY_WRITE_EVENTS` IS EXACTLY THE THREE** (§2,
+ *  `record.ts:53`), so a caret move carries no fourth name: it lands in the controller's in-memory slot and is carried into the
+ *  next whole-entry write. A per-move store write is the exact cost D-23 refused. */
+type StageDisplayEvent = 'tab-switch' | 'commit-on-blur' | 'scroll-settle' | null
+
+/** The FOUR drop words this region spells: §6's two declared drops (`no-entry`, `stamp-mismatch`), the one a deleted
+ *  document earns through `restoreCaret`'s own liveness clearing, and the contained body's own fault arm. */
+type StageDisplayDrop = 'no-entry' | 'stamp-mismatch' | 'document-gone' | 'restore-fault'
+
+/** **THE RESTORE'S ANSWER, AND BOTH MEMBERS ARE A CLAIM THE ROWS GRADE AGAINST THE DOM** (§7 `(S5)`'s `m4`): `reason` is `null`
+ *  exactly when the entry was ADMITTED and the apply ran, and `caretApplied`/`viewApplied` say what actually landed — a restore
+ *  that claimed an apply it did not earn is the fault the claim exists to be read against. */
+interface StageDisplayRestoreAnswer {
+  reason: StageDisplayDrop | null
+  caretApplied: boolean
+  viewApplied: boolean
+}
+
+/** The client, structurally: `displayOf` is the synchronous read off the held shape, `write` is §5's sender. Both are looked up
+ *  inside `try` (a hostile accessor is an absent member, never a throw). */
+interface StageDisplayClientLike {
+  displayOf?(tabId: string): unknown
+  write?(tabId: string, entry: unknown): unknown
+}
+
+/** The controller, structurally: `saveCaret` is the in-memory slot (the capture's only write on a MOVE) and `restoreCaret` is
+ *  the fork's own liveness verdict, which is how the restore learns that a document is gone without owning a store. */
+interface StageDisplayControllerLike {
+  saveCaret?(subjectId: string, caret: unknown): void
+  restoreCaret?(subjectId: string): unknown
+}
+
+/** The DOM lookups, structurally and optionally: the layout-less shim supplies none of them and that is a DECLARED no-op. */
+interface StageDisplayDocumentLike {
+  getElementById?(id: string): unknown
+  querySelector?(selector: string): unknown
+  createRange?(): unknown
+}
+
+interface StageDisplayWindowLike {
+  getSelection?(): unknown
+}
+
+/** The report the runtime seam settles (`runtime.ts`'s `DisplayCaptureReport`, structurally). **AND ITS `subject` IS THE ONE
+ *  MEMBER THAT DECIDES WHICH TAB A REPORT IS ABOUT** (§4, `B10-EX-02`): it is stamped at ARM time by the wiring's resolver, so a
+ *  settle that lands after an activation belongs to the tab it was READ FROM. `blur` says the settle was the surface's own
+ *  settle-away (`commit-on-blur`), and on that arm `caret` may be `null` — the DOM no longer stating a position is still a blur
+ *  (`B10-EX-04`), and the controller's slot is then the last-known caret. */
+interface StageDisplayReportLike {
+  readonly kind?: unknown
+  readonly caret?: unknown
+  readonly view?: unknown
+  readonly blur?: unknown
+  readonly subject?: unknown
+}
+
+/** **THE READING, STRUCTURALLY — AND IT IS DECLARED *HERE*, INSIDE THE REGION** (§6's type-self-containment: the region is cut
+ *  out of this file and compiled STANDALONE, so every type it names must be its own. A region that named the module-scope
+ *  `DisplayReading` — an IMPORT of `./display-client.js` — or the module-scope `DisplayBridge` failed `tsc --noEmit --strict` on
+ *  the extracted bytes with `TS2304`, which is the doc finding this round fixed. The names are prefixed because a same-name local
+ *  declaration beside an import is a duplicate identifier: the region owns its twins, and the ONE call site narrows the answer
+ *  back to the module's own type. It is a SHAPE, not an authority: the client's reading is passed through untouched. */
+interface StageDisplayReading {
+  readonly [tabId: string]: unknown
+}
+
+/** **THE BRIDGE, STRUCTURALLY** — the `window.provident` shape this region's adapter needs: ONE nested `display` member with the
+ *  three members the crossing installs over (`read`, `onChanged`, §5's `write`). Every member is optional, because the absent ones
+ *  are the client's OWN declared arms and never an exception here. */
+interface StageDisplayBridgeMember {
+  read?(): Promise<StageDisplayReading | null> | StageDisplayReading | null
+  onChanged?(handler: () => void): unknown
+  write?(payload: { tabId: string; entry: unknown }): unknown
+}
+
+interface StageDisplayBridge {
+  display?: StageDisplayBridgeMember
+}
+
+/** **THE BLUR WORD, AND THE FLAG IS THE AUTHORITY WHEN IT IS PRESENT** — which is what this function had to be CORRECTED to do
+ *  (adversarial round 2, MEASURED: a report carrying `blur: false` with `focused: false` answered `'commit-on-blur'` and wrote a
+ *  whole entry, so a `selectionchange` settle on an already-unfocused surface wrote PER SETTLE — the cost `D-23` refuses and the
+ *  thing §2's "a MOVE writes nothing" forbids; the old body consulted `focused` first and never read the flag's `false`).
+ *
+ *  The precedence, in one place: an explicit `blur: true` → a blur; an explicit `blur: false` → NOT a blur (the authority, when
+ *  present); with NO flag, the DOM's own answer (`blur:false` is the flag the runtime always stamps, so this arm is the shape
+ *  every cadence fixture drives — a caret with no `focused`, or `focused !== true`, is a settle-away; `caret: null` is a blur by
+ *  construction, because a caret report with nothing to state can only be the settle-away the `B10-EX-04` arm exists for). */
+function stageDisplayIsBlur(report: StageDisplayReportLike | null, caret: unknown): boolean {
+  const flag = stageDisplayMember(report, 'blur')
+  if (flag === true) return true
+  if (flag === false) return false
+  if (caret === null) return true
+  return stageDisplayMember(caret, 'focused') !== true
+}
+
+/** **EVERY COLLABORATOR, INJECTED** (§6) — and the `host` handle is here ONLY so §7 `(S5)`'s `INV-E` attribution is measurable:
+ *  the counters are wrapped on it and the shipped restore reaches NONE of its members (0/0/0), which is the point. */
+interface StageDisplayDeps {
+  readonly client?: StageDisplayClientLike | null
+  readonly editController?: StageDisplayControllerLike | null
+  readonly document?: StageDisplayDocumentLike | null
+  readonly window?: StageDisplayWindowLike | null
+  readonly host?: unknown
+  /** §3's law, injected by the wiring (`tab-state.ts`'s two PURE predicates); absent ⇒ the region's own spelling below. */
+  readonly law?: {
+    entryFor?(target: unknown, held: unknown): unknown
+    admits?(entry: unknown, target: unknown): boolean
+  } | null
+}
+
+/** A plain record — the one predicate the region shares with the family's parse's own reading of "a record". */
+const stageDisplayRecord = (held: unknown): held is Record<string, unknown> =>
+  held !== null && typeof held === 'object' && !Array.isArray(held)
+
+/** One contained member read: a throwing accessor contributes `undefined` instead of ending the caller. */
+function stageDisplayMember(held: unknown, member: string): unknown {
+  if (held === null || typeof held !== 'object') return undefined
+  try {
+    return (held as Record<string, unknown>)[member]
+  } catch {
+    return undefined
+  }
+}
+
+/** **THE CAPTURE'S LAW, IN THE REGION** (§3): only a `document`-target tab has an entry, and its `documentId` IS the target's
+ *  document. The held members are CARRIED and never judged — the family's ONE parse is the judge, and dropping a malformed
+ *  member here would turn a refusal into a silent absence. */
+function stageDisplayEntryFor(target: unknown, held: unknown): unknown {
+  if (!stageDisplayRecord(target) || target['kind'] !== 'document') return null
+  const documentId = target['documentId']
+  if (typeof documentId !== 'string' || documentId === '') return null
+  const entry: Record<string, unknown> = { documentId }
+  const caret = stageDisplayMember(held, 'caret')
+  const view = stageDisplayMember(held, 'view')
+  if (caret !== undefined && caret !== null) entry['caret'] = caret
+  if (view !== undefined && view !== null) entry['view'] = view
+  return entry
+}
+
+/** **THE RESTORE'S LAW, IN THE REGION** (§3): `true` IFF the target is a `document` target AND the stamp IS that document. A
+ *  `false` is a DROP — no caret, no scroll, and the document shown is still the target's; a stamp NEVER redirects. */
+function stageDisplayAdmits(entry: unknown, target: unknown): boolean {
+  if (!stageDisplayRecord(target) || target['kind'] !== 'document') return false
+  if (!stageDisplayRecord(entry)) return false
+  const documentId = stageDisplayMember(entry, 'documentId')
+  return typeof documentId === 'string' && documentId !== '' && documentId === target['documentId']
+}
+
+/** The tab's id — the ADDRESS SEGMENT (`display-shape.ts`'s header) — or `null`, in which case there is nothing to address. */
+function stageDisplayTabId(tab: unknown): string | null {
+  const id = stageDisplayMember(tab, 'id')
+  return typeof id === 'string' && id !== '' ? id : null
+}
+
+/** The child-node list of a node, contained; `null` where there is none to walk. */
+function stageDisplayChildren(node: unknown): ArrayLike<unknown> | null {
+  const kids = stageDisplayMember(node, 'childNodes')
+  if (kids === null || typeof kids !== 'object') return null
+  return typeof (kids as ArrayLike<unknown>).length === 'number' ? (kids as ArrayLike<unknown>) : null
+}
+
+/** The FIRST text node in document order under `node` (including `node` itself) — the `sidebar-panes.ts` law. */
+function stageDisplayFirstText(node: unknown): unknown {
+  if (stageDisplayMember(node, 'nodeType') === 3) return node
+  const kids = stageDisplayChildren(node)
+  if (kids === null) return null
+  for (let at = 0; at < kids.length; at += 1) {
+    const found = stageDisplayFirstText(kids[at])
+    if (found !== null) return found
+  }
+  return null
+}
+
+/** **A CHILD-INDEX PATH RESOLVED AGAINST THE DOM THAT IS THERE NOW** — the law `sidebar-panes.ts`'s `restorePageCaret`/
+ *  `resolveDomPath` already applies to the re-derive path, mirrored here (the contract's §9 `O-3` names the resulting
+ *  two-resolver finding and owes its unification; `(S5)` drives both against the SAME caret so they cannot silently diverge).
+ *  `[]` addresses the root and resolves to its first text node; an ELEMENT edge is clamped to its nearest text node in document
+ *  order (a real-DOM boundary selection on a `strong`/`em` must be restored, not dropped); a path that no longer resolves is
+ *  `null`, and the caller DROPS the caret — it is never repaired. */
+function stageDisplayResolvePath(root: unknown, path: readonly unknown[]): unknown {
+  let current: unknown = root
+  for (const step of path) {
+    if (typeof step !== 'number' || !Number.isInteger(step) || step < 0) return null
+    const kids = stageDisplayChildren(current)
+    if (kids === null || step >= kids.length) return null
+    current = kids[step]
+    if (current === undefined) return null
+  }
+  if (path.length === 0) {
+    const firstText = stageDisplayFirstText(current)
+    if (firstText !== null) return firstText
+  }
+  if (stageDisplayMember(current, 'nodeType') === 3) return current
+  return stageDisplayFirstText(current)
+}
+
+/** One caret edge: its `path` (a non-negative integer per step) and its `offset`. Anything else is no edge. */
+function stageDisplayEdge(edge: unknown): { path: unknown[]; offset: number } | null {
+  const path = stageDisplayMember(edge, 'path')
+  const offset = stageDisplayMember(edge, 'offset')
+  if (!Array.isArray(path)) return null
+  if (typeof offset !== 'number' || !Number.isInteger(offset) || offset < 0) return null
+  return { path: path as unknown[], offset }
+}
+
+/** The text length a caret offset is clamped to — `display-shape.ts`'s `offset` is an integer and the DOM's is the text node's. */
+function stageDisplayLengthOf(node: unknown): number {
+  const data = stageDisplayMember(node, 'data')
+  return typeof data === 'string' ? data.length : 0
+}
+
+/** **THE CARET, APPLIED INTO THE SURFACE** (§6): the path re-resolved against the RE-AUTHORED DOM, both offsets CLAMPED to the
+ *  text node's length, and the `focused` edge honoured only where the surface can take focus. `true` iff the selection LANDED —
+ *  the claim the rows grade, so it is never answered optimistically. An absent path, an absent `getSelection`/`createRange` (the
+ *  layout-less shim) and an absent surface are all `false`: a DROP, never a repair. */
+function stageDisplayApplyCaret(deps: StageDisplayDeps, caret: unknown): boolean {
+  const doc = deps.document ?? null
+  const win = deps.window ?? null
+  if (doc === null || win === null) return false
+  let surface: unknown
+  try {
+    surface = typeof doc.getElementById === 'function' ? doc.getElementById(STAGE_DISPLAY_SUBJECT) : null
+  } catch {
+    surface = null
+  }
+  if (surface === null || surface === undefined) return false
+  const anchor = stageDisplayEdge(stageDisplayMember(caret, 'anchor'))
+  const focus = stageDisplayEdge(stageDisplayMember(caret, 'focus'))
+  if (anchor === null || focus === null) return false
+  const anchorNode = stageDisplayResolvePath(surface, anchor.path)
+  const focusNode = stageDisplayResolvePath(surface, focus.path)
+  if (anchorNode === null || focusNode === null) return false
+  let selection: unknown
+  try {
+    selection = typeof win.getSelection === 'function' ? win.getSelection() : null
+  } catch {
+    selection = null
+  }
+  if (selection === null || typeof selection !== 'object') return false
+  let range: unknown = null
+  try {
+    range = typeof doc.createRange === 'function' ? doc.createRange() : null
+  } catch {
+    range = null
+  }
+  const setStart = stageDisplayMember(range, 'setStart')
+  const setEnd = stageDisplayMember(range, 'setEnd')
+  const addRange = stageDisplayMember(selection, 'addRange')
+  const removeAllRanges = stageDisplayMember(selection, 'removeAllRanges')
+  if (range === null || typeof setStart !== 'function' || typeof setEnd !== 'function') return false
+  try {
+    ;(setStart as (node: unknown, offset: number) => void).call(range, anchorNode, Math.min(anchor.offset, stageDisplayLengthOf(anchorNode)))
+    ;(setEnd as (node: unknown, offset: number) => void).call(range, focusNode, Math.min(focus.offset, stageDisplayLengthOf(focusNode)))
+    if (typeof removeAllRanges === 'function') (removeAllRanges as () => void).call(selection)
+    if (typeof addRange === 'function') (addRange as (value: unknown) => void).call(selection, range)
+    else return false
+  } catch {
+    return false
+  }
+  // AND THE FOCUS EDGE, honoured only when the caret says the focus belongs in the document AND the surface can take it.
+  if (stageDisplayMember(caret, 'focused') === true) {
+    const focusSurface = stageDisplayMember(surface, 'focus')
+    if (typeof focusSurface === 'function') {
+      try {
+        ;(focusSurface as () => void).call(surface)
+      } catch {
+        /* a surface that cannot take focus has not failed the apply: the selection landed */
+      }
+    }
+  }
+  return true
+}
+
+/** **THE SCROLL, APPLIED INTO THE STAGE'S OWN BOX** (§4/`ASM-B10-2`): `offset` is the restore's ONLY number and it is CLAMPED to
+ *  the box's own maximum. `section` is CARRIED and never an authority — no `scrollIntoView` (that would be a second placement
+ *  authority beside `offset`, and the stage's own layout is the placement law). `true` iff the box TOOK the value. */
+function stageDisplayApplyView(deps: StageDisplayDeps, view: unknown): boolean {
+  const doc = deps.document ?? null
+  if (doc === null) return false
+  let box: unknown = null
+  try {
+    box = typeof doc.querySelector === 'function' ? doc.querySelector(STAGE_DISPLAY_STAGE_SELECTOR) : null
+  } catch {
+    box = null
+  }
+  if (box === null || box === undefined) {
+    try {
+      box = typeof doc.getElementById === 'function' ? doc.getElementById(STAGE_DISPLAY_STAGE_ID) : null
+    } catch {
+      box = null
+    }
+  }
+  if (box === null || box === undefined || typeof box !== 'object') return false
+  const offset = stageDisplayMember(view, 'offset')
+  if (typeof offset !== 'number' || !Number.isInteger(offset) || offset < 0) return false
+  const scrollHeight = stageDisplayMember(box, 'scrollHeight')
+  const clientHeight = stageDisplayMember(box, 'clientHeight')
+  const ceiling =
+    typeof scrollHeight === 'number' && typeof clientHeight === 'number' && Number.isFinite(scrollHeight) && Number.isFinite(clientHeight)
+      ? Math.max(0, Math.round(scrollHeight - clientHeight))
+      : null
+  const wanted = ceiling === null ? offset : Math.min(offset, ceiling)
+  try {
+    ;(box as { scrollTop?: unknown }).scrollTop = wanted
+  } catch {
+    return false
+  }
+  // THE CLAIM IS THE READING: the box's own value after the write decides, so the answer cannot outrun the DOM.
+  const landed = stageDisplayMember(box, 'scrollTop')
+  return typeof landed === 'number' && Math.round(landed) === wanted
+}
+
+/** The client's OWN held entry for a tab — `client.displayOf` is synchronous and costs the port NOTHING (§6), and the entry it
+ *  answers has already been judged by the family's parse. `null` where the client, the route or the entry is absent. */
+function stageDisplayHeldEntry(client: StageDisplayClientLike | null, tabId: string): unknown {
+  if (client === null) return null
+  let answer: unknown
+  try {
+    const route = client.displayOf
+    if (typeof route !== 'function') return null
+    answer = route.call(client, tabId)
+  } catch {
+    return null
+  }
+  return stageDisplayRecord(answer) ? answer : null
+}
+
+/** The caret a held entry states, or `null` — one contained read, and a non-record is no caret. */
+function stageDisplayHeldCaret(client: StageDisplayClientLike | null, tabId: string): unknown {
+  const held = stageDisplayHeldEntry(client, tabId)
+  const caret = stageDisplayMember(held, 'caret')
+  return stageDisplayRecord(caret) ? caret : null
+}
+
+/** **THE LAST-KNOWN CARET'S SLOT, MIRRORED FOR READING — and the mirror is what makes §2's sentence TRUE** (`B10-EX-01`,
+ *  MEASURED: real store + real delivery + a real push, `commit-on-blur(offset 4)` → 40 selection moves → `scroll-settle` →
+ *  `tab-switch`, and the record still held **offset 4** — the capture composed the entry from the settled REPORT or the record's
+ *  held entry and never asked the slot, so a moved caret never reached ANY write).
+ *
+ *  **WHY A MIRROR AND NOT A CALL TO `restoreCaret`** — measured, not a preference: `EditController.restoreCaret` is the only
+ *  reader of the slot, and its liveness hook is the HOST's (`sidebar-panes.ts`: `subject === activeTabId ? activeDocumentId :
+ *  null`). At the `tab-switch` capture the strip has ALREADY moved its `activeId`, so `restoreCaret(<outgoing tab>)` answers
+ *  `undefined` **and DELETES the slot** — the exact instant the outgoing tab's caret is needed is the instant that read would
+ *  destroy it. `edit-controller.ts` takes NO BYTE (§4's pinned 11-member census: a getter there would be a second way to state
+ *  the caret), so this region keeps the VALUE it wrote into that slot, in the same act, and reads it back. **IT IS A MIRROR AND
+ *  NOT A SECOND AUTHORITY**: nothing else writes the controller's slot, and both of this region's writers write both — one value,
+ *  two readers. **THE ONE HONEST LIMIT** (adversarial round 2, MEASURED): where the controller is ABSENT (a harness) or its
+ *  `saveCaret` READ throws, the mirror is the only statement — this region's own memory of the last caret it captured, which can
+ *  never invent one (only a recorded caret is ever set).
+ *
+ *  What this closes, edge by edge: a caret MOVE still writes nothing (§2's adjudication), it lands here and in the slot, and the
+ *  NEXT whole-entry write — a `commit-on-blur`, a `scroll-settle`, or the `tab-switch` — carries it. */
+const stageDisplayCaretSlots = new Map<string, unknown>()
+
+/** **WRITE THE CARET WHERE THE FORK'S OWN STATE LIVES**: the controller's `saveCaret` slot (with the surface subject re-added,
+ *  because `restoreCaret`'s FS2 arm drops a `rich` caret whose `ragId` is not `#page-edit-surface`) AND this region's read-side
+ *  mirror of that same value. Both writes are contained, and a caret that is no record writes NEITHER. */
+function stageDisplayRememberCaret(controller: StageDisplayControllerLike | null, tabId: string, caret: unknown): void {
+  if (tabId === '' || !stageDisplayRecord(caret)) return
+  stageDisplayCaretSlots.set(tabId, caret)
+  if (controller === null) return
+  // **THE MEMBER READ IS CONTAINED TOO** (adversarial round 2, MEASURED: a controller whose `saveCaret` GETTER throws escaped this
+  // function — the region's "TOTAL at any argument" sentence was false for the one collaborator read that sat outside a `try`).
+  try {
+    const route = controller.saveCaret
+    if (typeof route !== 'function') return
+    ;(route as (subjectId: string, value: unknown) => void).call(controller, tabId, {
+      kind: 'rich',
+      anchor: stageDisplayMember(caret, 'anchor'),
+      focus: stageDisplayMember(caret, 'focus'),
+      focused: stageDisplayMember(caret, 'focused') === true,
+      ragId: STAGE_DISPLAY_SUBJECT,
+    })
+  } catch {
+    /* the controller's slot, the controller's error — the mirror still carries the last known caret */
+  }
+}
+
+/** The last caret this realm placed in the slot for `tabId`, or `null` — one contained read of the mirror. */
+function stageDisplayLastCaret(tabId: string): unknown {
+  if (tabId === '') return null
+  const held = stageDisplayCaretSlots.get(tabId)
+  return stageDisplayRecord(held) ? held : null
+}
+
+/** **WHICH TAB A REPORT IS ABOUT, AND WHICH OF THE PINNED THREE EVENTS IT CARRIES** (§2, §4; `B10-EX-02`/`B10-EX-04`).
+ *
+ *  THE SUBJECT DECIDES THE TAB, NOT THE ACTIVE TAB: the report's `subject` was stamped when the DOM event FIRED, so a settle that
+ *  lands 50 ms after a click's activation still belongs to the tab its read was taken in (`B10-EX-02`, MEASURED: the same blur was
+ *  written as `{documentId:'doc-b', caret:{offset:7}}` — another tab's entry). A report with NO subject falls back to the active
+ *  tab — the declared absence, which is the shape every cadence row drives. A subject that names no open tab answers `tab: null`
+ *  and the capture then writes NOTHING: an entry cannot be addressed to a tab that is not there.
+ *
+ *  THE EVENT IS THE OTHER HALF: a `view` is the scroll's settle, a `caret` is `commit-on-blur` when the report says it was a blur
+ *  OR when the caret is no longer the operator's own (`focused !== true`, the shape a report without a `blur` flag expresses), and
+ *  the MOVE (which writes nothing) otherwise. */
+function stageDisplayCaptureRoute(
+  report: StageDisplayReportLike | null,
+  activeTab: unknown,
+  openTabs: unknown,
+): { tab: unknown; subject: string | null; event: StageDisplayEvent } {
+  const stamped = stageDisplayMember(report, 'subject')
+  const subject = typeof stamped === 'string' && stamped !== '' ? stamped : stageDisplayTabId(activeTab)
+  const kind = stageDisplayMember(report, 'kind')
+  const caret = kind === 'caret' && stageDisplayRecord(stageDisplayMember(report, 'caret')) ? stageDisplayMember(report, 'caret') : null
+  const event: StageDisplayEvent =
+    kind === 'view' ? 'scroll-settle' : kind === 'caret' ? (stageDisplayIsBlur(report, caret) ? 'commit-on-blur' : null) : null
+  if (subject === null) return { tab: null, subject: null, event }
+  if (openTabs !== null && openTabs !== undefined && typeof openTabs === 'object') {
+    // **THE OPEN SET'S OWN READS ARE CONTAINED** (adversarial round 2, MEASURED: an array-like whose `length` getter throws, and a
+    // proxy whose `get` trap throws, both escaped this function — its "TOTAL at any argument" sentence was false on the ONE
+    // argument it walked without a guard). A set that cannot be read is an EMPTY set, and the fallback below still applies.
+    let length = 0
+    try {
+      const raw = (openTabs as ArrayLike<unknown>).length
+      length = typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0
+    } catch {
+      length = 0
+    }
+    for (let at = 0; at < length; at += 1) {
+      let entry: unknown
+      try {
+        entry = (openTabs as ArrayLike<unknown>)[at]
+      } catch {
+        continue
+      }
+      if (stageDisplayTabId(entry) === subject) return { tab: entry, subject, event }
+    }
+  }
+  // NOT IN THE OPEN SET: the subject still names the tab (`subject` is answered for the report's own keying), and a tab whose
+  // ENTRY is unknown writes nothing — the stamp cannot be built without the tab's TARGET (§3).
+  return { tab: stageDisplayTabId(activeTab) === subject ? activeTab : null, subject, event }
+}
+
+/**
+ * **THE CAPTURE (`§2`, `§7` `(S1)`): ONE REPORT IN, AT MOST ONE WHOLE-ENTRY WRITE OUT.**
+ *
+ * The two sentences of §2's adjudication, both here and both load-bearing:
+ *   · **THE CARET ALWAYS LANDS IN THE CONTROLLER'S SLOT** — on every caret report, including the ones that write nothing — so the
+ *     fork's own `restoreCaret` (and the next re-derive's restore loop) carries the last place the operator was;
+ *   · **AND A MOVE WRITES NOTHING**: `event === null` is the caret move's arm (`DISPLAY_WRITE_EVENTS` is EXACTLY the three, so a
+ *     move can carry no fourth name), and a per-move store write is exactly the cost D-23 refused.
+ *
+ * `EVERY EVENT WRITES THE WHOLE ENTRY` — the tab's document stamp, the freshest caret (**the report's, else the controller slot's
+ * last-known caret, else the record's**) and the freshest view (the report's, else the record's), never a member-by-member write.
+ * A non-`document` target writes NOTHING (§3), and the write is the client's §5 sender, whose own absent arm is `no-write-route`.
+ */
+function captureStageDisplay(deps: StageDisplayDeps | null, tab: unknown, report: StageDisplayReportLike | null, event: StageDisplayEvent): void {
+  try {
+    const collaborators: StageDisplayDeps = stageDisplayRecord(deps) ? (deps as StageDisplayDeps) : {}
+    const tabId = stageDisplayTabId(tab)
+    if (tabId === null) return
+    const client = collaborators.client ?? null
+    const controller = collaborators.editController ?? null
+    const kind = stageDisplayMember(report, 'kind')
+    const reportCaret = kind === 'caret' && stageDisplayRecord(stageDisplayMember(report, 'caret')) ? stageDisplayMember(report, 'caret') : null
+    const reportView = kind === 'view' && stageDisplayRecord(stageDisplayMember(report, 'view')) ? stageDisplayMember(report, 'view') : null
+
+    // ── (1) THE CARET'S SLOT — the controller's in-memory state, re-addressed to the ONE page surface (§4's `CaretState` minus
+    // ── `ragId`, which the record's stamp carries once). This is the ONLY thing a caret MOVE does — and the slot is where the
+    // ── next whole-entry write finds the caret (`B10-EX-01`: this is the read §2's sentence needs).
+    if (reportCaret !== null) stageDisplayRememberCaret(controller, tabId, reportCaret)
+    // ── THE MOVE WRITES NOTHING (§2's adjudication, in one line) — **AND THE GATE IS A SET TEST, NOT `event === null`**
+    // ── (adversarial round 2, MEASURED: `undefined`, `0` and `'bogus'` each produced a whole-entry write, so a fourth write
+    // ── trigger existed for every non-null value while §2 pins `DISPLAY_WRITE_EVENTS` at EXACTLY the three). Anything that is not
+    // ── one of the pinned three — including the move's `null` — writes nothing.
+    if (event !== 'tab-switch' && event !== 'commit-on-blur' && event !== 'scroll-settle') return
+
+    // ── (2) THE WHOLE ENTRY, BY THE STAMP LAW (§3). The target decides; the stamp only identifies. The caret this write carries
+    // ── is the FRESHEST of THREE statements, in this order and for these reasons:
+    // ──   (a) THE REPORT'S OWN CARET — the position this event just settled;
+    // ──   (b) **THE SLOT'S LAST-KNOWN CARET** — `B10-EX-01`, and the fix that makes §2's sentence true: a caret MOVE lands in the
+    // ──       slot and is carried into the NEXT whole-entry write, so `move → scroll-settle → tab-switch` writes the moved caret
+    // ──       and not the one the last blur happened to commit;
+    // ──   (c) the record's held entry — the last thing written for this tab, which is the ONLY statement left on a tab that has
+    // ──       never been read in this realm.
+    // ── The member the report does not state comes from the record's own held entry, so "the whole entry" is replaced in ONE act.
+    const slotCaret = reportCaret !== null ? null : stageDisplayLastCaret(tabId)
+    const held = {
+      caret: reportCaret !== null ? reportCaret : slotCaret !== null ? slotCaret : stageDisplayHeldCaret(client, tabId),
+      view: reportView !== null ? reportView : stageDisplayMember(stageDisplayHeldEntry(client, tabId), 'view'),
+    }
+    const law = collaborators.law ?? null
+    const build = law !== null && typeof law.entryFor === 'function' ? law.entryFor : stageDisplayEntryFor
+    let entry: unknown
+    try {
+      entry = build(stageDisplayMember(tab, 'target'), held)
+    } catch {
+      entry = null
+    }
+    if (!stageDisplayRecord(entry)) return // §3: only a `document`-target tab has an entry — a non-document one writes NOTHING.
+    if (client === null) return
+    let route: unknown
+    try {
+      route = client.write
+    } catch {
+      route = null
+    }
+    if (typeof route !== 'function') return // §5's fifth absent arm, where the sender itself is missing.
+    try {
+      void (route as (tabId: string, entry: unknown) => unknown).call(client, tabId, entry)
+    } catch {
+      /* the transport's error is the transport's: the capture writes nothing and repaints nothing (`ASM-B10-1`) */
+    }
+  } catch {
+    /* TOTAL: a capture that threw would be a capture that repainted the caller's world; it reports nothing instead */
+  }
+}
+
+/**
+ * **THE RESTORE (`§6`): the STAMP ARM FIRST, then the carried position applied into the re-authored DOM.**
+ *
+ * The order is the contract's and it is the whole of §3's consequence: an ABSENT entry is `no-entry` and a MISMATCHED stamp is
+ * `stamp-mismatch` — both DECLARED drops, with no caret and no scroll applied and the document on screen still the TARGET's. A
+ * stamp never redirects what is shown.
+ *
+ * **THE FORK'S OWN LIVENESS IS CONSULTED THROUGH THE RESTORE'S OWN PRIMING**: the caret is saved on the controller (which is what
+ * §6 asks the restore to do anyway, so the next re-derive's restore loop carries it) and `restoreCaret`'s answer is the fork's
+ * verdict — a deleted document's caret is CLEARED by the carrier `edit-controller.ts:249-271` already owns, and the restore
+ * answers the DECLARED `document-gone` drop rather than applying a position into a document that is gone.
+ *
+ * **AND `INV-E` IS MEASURED ON THIS TURN**: nothing below touches `deps.host` — no `loadAppGraph`, no `mountOperator`, no
+ * `refresh()`, no re-assembly of any kind (`B-3`'s counters are the attribution, and the tab switch's own mount is excluded by
+ * name). Everything is SYNCHRONOUS off the held reading: no await, no poll, no second read, which is why the restore cannot race
+ * the store.
+ */
+function restoreDisplayState(deps: StageDisplayDeps | null, tab: unknown): StageDisplayRestoreAnswer {
+  const drop = (reason: StageDisplayDrop): StageDisplayRestoreAnswer => ({ reason, caretApplied: false, viewApplied: false })
+  try {
+    const collaborators: StageDisplayDeps = stageDisplayRecord(deps) ? (deps as StageDisplayDeps) : {}
+    const tabId = stageDisplayTabId(tab)
+    if (tabId === null) return drop('no-entry')
+    const client = collaborators.client ?? null
+    const controller = collaborators.editController ?? null
+    const heldEntry = stageDisplayHeldEntry(client, tabId)
+    // ── THE STAMP ARM RUNS FIRST (§6): an absent entry and a mismatched stamp are both DECLARED drops.
+    if (heldEntry === null) return drop('no-entry')
+    const law = collaborators.law ?? null
+    const admits = law !== null && typeof law.admits === 'function' ? law.admits : stageDisplayAdmits
+    let admitted = false
+    try {
+      admitted = admits(heldEntry, stageDisplayMember(tab, 'target')) === true
+    } catch {
+      admitted = false
+    }
+    if (!admitted) return drop('stamp-mismatch')
+    const caret = stageDisplayMember(heldEntry, 'caret')
+    const view = stageDisplayMember(heldEntry, 'view')
+    const caretRecord = stageDisplayRecord(caret) ? caret : null
+    const viewRecord = stageDisplayRecord(view) ? view : null
+
+    // ── THE PRIMING, AND THE LIVENESS VERDICT IT BUYS (§6, §7 `(S5)`'s deleted arm): the controller is primed with the entry's
+    // ── OWN caret (the subject re-added), and the fork's restore answers whether that document is still there. **AND THE SLOT'S
+    // ── MIRROR FOLLOWS THE VERDICT, NOT THE PRIMING** (`B10-EX-01`): a caret the fork's own liveness arm CLEARS must not survive in
+    // ── this region's mirror, or the next capture would carry a caret for a document that is gone.
+    if (caretRecord !== null && controller !== null && typeof controller.saveCaret === 'function') {
+      try {
+        controller.saveCaret(tabId, {
+          kind: 'rich',
+          anchor: stageDisplayMember(caretRecord, 'anchor'),
+          focus: stageDisplayMember(caretRecord, 'focus'),
+          focused: stageDisplayMember(caretRecord, 'focused') === true,
+          ragId: STAGE_DISPLAY_SUBJECT,
+        })
+      } catch {
+        /* the slot is the controller's; the restore still applies nothing it cannot claim */
+      }
+      let carried: unknown
+      try {
+        carried = typeof controller.restoreCaret === 'function' ? controller.restoreCaret(tabId) : undefined
+      } catch {
+        carried = undefined
+      }
+      if (carried === null || carried === undefined) {
+        stageDisplayCaretSlots.delete(tabId)
+        return drop('document-gone')
+      }
+      stageDisplayCaretSlots.set(tabId, caretRecord)
+    }
+
+    // ── THE POSITION, APPLIED: the caret first (it may focus the surface), then the scroll — the restore's ONE number, clamped.
+    const caretApplied = caretRecord !== null ? stageDisplayApplyCaret(collaborators, caretRecord) : false
+    const viewApplied = viewRecord !== null ? stageDisplayApplyView(collaborators, viewRecord) : false
+    return { reason: null, caretApplied, viewApplied }
+  } catch {
+    return drop('restore-fault')
+  }
+}
+
+/** **THE BRIDGE↔PORT SHAPE ADAPTER — ONE LINE OF LAW WHERE TWO PINNED SHAPES MEET.** §5 pins the preload's member as
+ *  `write(payload: { tabId, entry })` (ONE argument, declared on ONE line as the realm's structural twin), while the client's
+ *  port is POSITIONAL (`write(tabId, entry)`) — the shape every cadence row drives, because the address and the whole entry are
+ *  two facts about one act. Neither shape may bend, so the crossing is installed over this adapter and the transport still gets
+ *  EXACTLY ONE call per write. **IT IS TOTAL AND IT IS A PASS-THROUGH WHERE IT CANNOT ADAPT**: an absent bridge, an absent/
+ *  non-object member or a THROWING getter answers the bridge UNCHANGED, so `installDisplayCrossing`'s own contained `memberOf`
+ *  stays the one authority on an absent port, and a member with no `write` is left exactly as it was (the client's
+ *  `no-write-route` is then the word the caller reads).
+ *
+ *  **AND ITS TYPES ARE THE REGION'S OWN** (`StageDisplayBridge`: §6's type-self-containment — the extracted region compiles with
+ *  no module-scope name, so this function speaks the structural twin and answers `unknown`; the ONE call site narrows the answer
+ *  back to the module-scope `DisplayBridge` it already holds, and the value itself is untouched). */
+function stageDisplayBridge(bridge: StageDisplayBridge | null | undefined): unknown {
+  if (bridge === null || bridge === undefined) return bridge
+  try {
+    const member = bridge.display
+    if (member === null || member === undefined || typeof member !== 'object') return bridge
+    const route = (member as { write?: unknown }).write
+    if (typeof route !== 'function') return bridge
+    const read = member.read
+    const onChanged = member.onChanged
+    const adapted = {
+      read: typeof read === 'function' ? (): Promise<StageDisplayReading | null> => read.call(member) as Promise<StageDisplayReading | null> : undefined,
+      onChanged: typeof onChanged === 'function' ? (handler: () => void): unknown => onChanged.call(member, handler) : undefined,
+      write: (tabId: string, entry: unknown): unknown => (route as (payload: { tabId: string; entry: unknown }) => unknown).call(member, { tabId, entry }),
+    }
+    return { display: adapted }
+  } catch {
+    return bridge
+  }
+}
+// ⟦/B-10-STAGE-DISPLAY⟧
+
 async function main(): Promise<void> {
   const mount = document.getElementById('app')
   if (!mount) throw new Error('mount #app missing')
@@ -1580,6 +2244,36 @@ async function main(): Promise<void> {
   // constructed below (after the tab strip); the closures read it lazily so the
   // strip can be built first.
   let host: SidebarPanes | null = null
+  // ⟨Unit `B-10` `stage-display-state` §5/§6 — THE STAGE-DISPLAY HOLDERS, DECLARED BEFORE THE STRIP CAN READ THEM.⟩ The strip is
+  // constructed BELOW the crossing, the edit controller and the runtime's capture seam, and its activation closure reads all three
+  // — so they live in this holder rather than in `const`s declared later (`host` one line up is the same pattern, for the same
+  // reason: a `const` reached from a closure the strip can fire at any `commit()` would be a TDZ reference).
+  //   · `crossing` is `B-2`'s ONE installation (lifted, never re-installed);
+  //   · `controller` is the fork's edit controller — the capture's in-memory caret slot and the restore's liveness carrier;
+  //   · `law` is `tab-state.ts`'s stamp rule, injected so the shipped capture/restore never judge a stamp by a second spelling;
+  //   · `report`/`reportTabId` are the LAST settled capture report and the tab it belonged to — the `tab-switch` capture's input,
+  //     because by the time the strip reports an activation the DOM already belongs to the INCOMING tab;
+  //   · `lastTab` is the OUTGOING tab, which is the one `tab-switch` writes.
+  const stageDisplay: {
+    crossing: DisplayCrossing | null
+    controller: ReturnType<typeof createEditController> | null
+    law: NonNullable<StageDisplayDeps['law']> | null
+    report: DisplayCaptureReport | null
+    reportTabId: string | null
+    lastTab: TabEntry | null
+  } = { crossing: null, controller: null, law: null, report: null, reportTabId: null, lastTab: null }
+  /** The collaborators §6 injects, read LAZILY off the holder — so a capture or a restore fired before the crossing exists is a
+   *  declared no-op (an absent client/controller) rather than a throw. */
+  const stageDisplayDeps = (): StageDisplayDeps => ({
+    client: stageDisplay.crossing === null ? null : stageDisplay.crossing.client,
+    editController: stageDisplay.controller,
+    document: typeof document === 'undefined' ? null : document,
+    window: typeof window === 'undefined' ? null : window,
+    law: stageDisplay.law,
+  })
+  /** The settled report IF it belongs to `tabId`, else `null` — a report about another tab is no report about this one. */
+  const stageDisplayReportFor = (tabId: string): DisplayCaptureReport | null =>
+    stageDisplay.report !== null && stageDisplay.reportTabId === tabId ? stageDisplay.report : null
   tabStrip = new TabStrip({
     mount: tabMount,
     // HOST-2 — the REAL default-resolution context (the focused store's
@@ -1591,8 +2285,22 @@ async function main(): Promise<void> {
       void tabBridge?.set?.({ tabs })
     },
     // HOST-1 — mount the active tab's body (and unmount the previous).
+    // ⟨Unit `B-10` `§6` — THE RESTORE'S ONE SITE, AND THE ORDER IS THE CLAIM.⟩ Every activation runs the contract's three steps:
+    //   (1) **CAPTURE the OUTGOING tab under `tab-switch`** — BEFORE the mount, because the DOM still holds the outgoing tab's
+    //       caret and scroll and that is the last instant at which they can be read. The outgoing tab is `lastTab`, not `entry`:
+    //       the strip reports the tab that has just become active;
+    //   (2) the host's EXISTING `mountTab(entry)` — the app's own behaviour, untouched;
+    //   (3) **RESTORE from `client.displayOf(entry.id)`** — SYNCHRONOUSLY off the held shape (no await, no poll, no second read),
+    //       which is why the restore cannot race the store. The stamp arm runs first and a mismatch is a DROP: no caret, no
+    //       scroll, and the document on screen is still the TARGET's.
     onActiveChange: (entry) => {
+      const outgoing = stageDisplay.lastTab
+      stageDisplay.lastTab = entry
+      if (outgoing !== null) {
+        captureStageDisplay(stageDisplayDeps(), outgoing, stageDisplayReportFor(outgoing.id), 'tab-switch')
+      }
       if (host) host.mountTab(entry)
+      restoreDisplayState(stageDisplayDeps(), entry)
     },
   })
   // HOST-1/HOST-2 — the tab boot: load the persisted tab set, materialize the
@@ -1814,9 +2522,49 @@ async function main(): Promise<void> {
   // paint sees the reading the re-read answered.
   // **THIS ADDS NO REGISTRATION (`B2-ADV-04`):** it is the ONE installation's own listener carrying one more body. A second
   // `installDisplayCrossing`/`client.subscribe` call would be a second `ipcRenderer.on` for ONE channel and would double every push.
-  const displayCrossing = installDisplayCrossing(bridge as DisplayBridge | undefined, () => {
+  const displayCrossing = installDisplayCrossing(stageDisplayBridge(bridge as DisplayBridge | undefined) as DisplayBridge | undefined, () => {
+    // ⟨Unit `B-10` `§6` — **THE ECHO RULE, STATED WHERE THE HAZARD IS.**⟩ THIS HANDLER IS A PUSH, AND **A PUSH NEVER RESTORES**: it
+    // re-reads (the client's own listener did that) and repaints nothing. A restore wired to this arm would write our own capture
+    // back and move a live caret under the operator's hands the instant it saved — so the only restore site in the app is the tab
+    // ACTIVATION, three steps up. Nothing below this line touches the record's state or the stage's DOM.
     paneEvents.deliver()
   })
+  // THE HOLDERS FILLED, once, in the ONE place each is constructed — the strip's activation closure reads them from here on.
+  stageDisplay.crossing = displayCrossing
+  stageDisplay.controller = editController
+  stageDisplay.law = { entryFor: displayEntryFor, admits: displayEntryAdmitsTab }
+  // ⟨Unit `B-10` `§2`/`§4` — THE CAPTURE'S WIRING, AND ITS FOUR TRIGGERS IN TWO PLACES.⟩ The runtime seam hands over SETTLED
+  // reports (`selectionchange`/`focusout` over `#page-edit-surface`, `scroll` over `#app [id="zone:main"]`):
+  //   · a CARET report primes the controller's in-memory slot and — because `DISPLAY_WRITE_EVENTS` is exactly the three (§2) — a
+  //     caret MOVE writes NOTHING; it is carried into the next whole-entry write. A caret report whose `focused` is FALSE is the
+  //     surface's own settle-AWAY (the blur), and that is the ONE caret report that writes: `commit-on-blur`;
+  //   · a VIEW report is the stage's `scroll-settle`, one write per settle.
+  // The third trigger — `tab-switch` — is the strip's activation above, and it is the only one that needs no report of its own.
+  // ⟨`B10-EX-02`/`B10-EX-04`, MEASURED and FIXED HERE:⟩ **THE TAB A REPORT BELONGS TO IS THE SUBJECT IT WAS READ FROM, RESOLVED BY
+  // THE REGION'S OWN `stageDisplayCaptureRoute`** — NOT `tabStrip.active()` at the settle. A blur on tab-a's DOM whose settle landed
+  // 50 ms after the click's activation used to be written as tab-b's entry; the report now carries the subject stamped at ARM time
+  // (the runtime asks `subjectOf` then, never at settle), and the route resolves that subject to ITS tab. **AND A BLUR REACHES THE
+  // CAPTURE EVEN WHEN THE DOM STATES NO CARET**: the route's event is `commit-on-blur`, the report's `caret` may be `null`, and the
+  // capture then carries the controller slot's last-known caret — a blur that captured nothing was a hole, not an arm.
+  runtime.observeDisplayState(
+    (report) => {
+      const active = tabStrip === null ? null : tabStrip.active()
+      const open = tabStrip === null ? null : tabStrip.getState().open
+      const route = stageDisplayCaptureRoute(report, active, open)
+      stageDisplay.report = report
+      stageDisplay.reportTabId = route.subject
+      if (route.tab === null) return
+      captureStageDisplay(stageDisplayDeps(), route.tab, report, route.event)
+    },
+    {
+      // THE SUBJECT RESOLVER: asked at ARM time, which is the whole of `B10-EX-02`. It reads the strip's active tab — the tab whose
+      // stage the DOM belongs to at the instant the event fires — and answers `null` (a declared absence) before the strip exists.
+      subjectOf: () => {
+        const active = tabStrip === null ? null : tabStrip.active()
+        return active === null ? null : active.id
+      },
+    },
+  )
   // HOST-1/HOST-2 — boot the host first so the store/doc-heads snapshot is
   // available, then load the persisted tabs + materialize the default + mount
   // the active body (the real default context). The host boot is not blocked.

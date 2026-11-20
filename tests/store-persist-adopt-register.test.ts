@@ -510,7 +510,8 @@ const STORE_REFUSALS = ['undeclared-name', 'tier-filter-miss', 'secure-refused',
  *  `CENSUS: 2` is KEPT VISIBLE here rather than deleted. **NO OTHER LIMB MOVES**: every export is
  *  still a NON-EMPTY STRING constant (no function, no state), and the single-source rule below now
  *  covers all FOUR literals — the SAME rule over a wider subject, never a relaxed one. */
-const CHANNEL_EXPORT_NAMES = ['STORE_FILE_GET', 'STORE_FILE_PUT', 'DISPLAY_READ', 'DISPLAY_CHANGED'] as const
+// ⟨RE-STATED 2026-11-19 by unit `B-10` `stage-display-state` — the record's WRITE channel lands here: the census moves FOUR → FIVE (`DISPLAY_WRITE`, the ONE sender member `B-2` §4 reserved for this unit). The claim is UNMOVED; the set is widened by exactly what the change added.⟩
+const CHANNEL_EXPORT_NAMES = ['STORE_FILE_GET', 'STORE_FILE_PUT', 'DISPLAY_READ', 'DISPLAY_CHANGED', 'DISPLAY_WRITE'] as const
 /** §2.1 — the four declared values, single-sourced (the `B-2` pair added 2026-11-18; the two
  *  store-channel values are the as-filed ones, unmoved). */
 const CHANNEL_VALUES: ReadonlyArray<[string, string]> = [

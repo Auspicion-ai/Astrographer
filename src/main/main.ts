@@ -24,7 +24,7 @@ import { buildRagStoreDirectory, storeLoadStatus } from './rag-store-directory.j
 import { createRagStoreRuntimeController } from './rag-store-runtime.js'
 import { CapabilityRouter } from '../renderer/extensions.js'
 import { createO0HookRecorder } from '../shared/o0-hook.js'
-import { DISPLAY_CHANGED, DISPLAY_READ, STORE_FILE_GET, STORE_FILE_PUT } from './store-channels.js'
+import { DISPLAY_CHANGED, DISPLAY_READ, DISPLAY_WRITE, STORE_FILE_GET, STORE_FILE_PUT } from './store-channels.js'
 
 // §3.6b — the MAIN-side O-0 recorder (the optional `snapshot.clone` refinement): a
 // SECOND, INDEPENDENT instance — never the RENDERER's app-wide singleton. The driver
@@ -565,6 +565,21 @@ async function main(): Promise<void> {
   // `null` and nothing throws (`createDisplayRecord` is total over its store: an absent family is a declared absence).
   const displayRecord = displayStore === null ? null : createDisplayRecord({ store: displayStore, delivery: displayDelivery })
   ipcMain.handle(DISPLAY_READ, () => (displayRecord === null ? null : displayRecord.read()))
+  // ⟨Unit `B-10` `stage-display-state` §5 — **THE "MISSING WIRING ARM" THE DELEGATION ANTICIPATED, AND IT IS ONE ARM.**⟩
+  // The renderer's capture has a sender (`display.write`) and the record has a write route (`commitTab`), and until this line
+  // existed NOTHING joined them: an entry could be built and never landed. So: ONE `invoke`/`handle` pair over `DISPLAY_WRITE`,
+  // beside the landed `DISPLAY_READ` arm, with **NO SECOND CONSTRUCTION, NO STORE VERB OF ITS OWN** and no `--external` or
+  // `package.json` change — the record IS the writer, and it is the record that judges.
+  //   · a DEGRADED BOOT (`displayRecord === null`) answers the DECLARED `null` — the same word the read arm answers, and never a
+  //     throw: losing a caret must not fail a renderer that has nothing to do with the store;
+  //   · otherwise the payload's `tabId`/`entry` are taken STRUCTURALLY and handed straight to `commitTab`, whose own shape arms and
+  //     whose ONE parse do the judging — a forged payload is REFUSED there with the family's own token, NEVER repaired and never
+  //     coerced here. A store refusal crosses as itself (the record's own rule), so this arm adds no vocabulary.
+  ipcMain.handle(DISPLAY_WRITE, (_event, payload: unknown) => {
+    if (displayRecord === null) return null
+    const shape = (payload !== null && typeof payload === 'object' ? payload : {}) as { tabId?: unknown; entry?: unknown }
+    return displayRecord.commitTab(shape.tabId as string, shape.entry)
+  })
 
   // Unit U-MENU-1 §2 — the native application-menu surface. The renderer pushes
   // the live pane catalog over `IPC_PANE_CATALOG` (boot + registry change); main

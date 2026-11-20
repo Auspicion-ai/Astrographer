@@ -65,6 +65,10 @@ import type { TranslatedWarning } from 'provident-ssr/core/translate.js'
 import { handlerDef, compileHandlerBody } from 'provident-ssr/core/registry.js'
 import type { CapabilityRouter } from './extensions.js'
 import { getO0HookRecorder } from '../shared/o0-hook.js'
+// ⟨Unit `B-10` `stage-display-state` §4 — THE CAPTURE SEAM'S VOCABULARY.⟩ Type-only: `display-shape.js` is the family's PURE
+// module (import-free, no store, no main-process byte) and the fork's caret/scroll vocabulary is the ONE the record states, so
+// the runtime and the record cannot disagree about what a caret or a view IS. Nothing is imported at run time.
+import type { DisplayCaret, DisplayView } from '../main/record-engine/display-shape.js'
 
 // §3.6/§6 F15 — the renderer's handle to the app-wide O-0 recorder the
 // instrumented call sites share. The driver's page-side hook (`window.__o0`,
@@ -134,6 +138,178 @@ export interface ApplyReconcileReport {
  *  survives a still-empty content reconcile (INV-E2/E4). Pane-like root
  *  (document-unscoped), never a `rag-` document subtree. */
 const LANDING_ROOT_ID = 'stage-landing'
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// ⟨Unit `B-10` `stage-display-state` (`docs/L1/unit-b-10-stage-display-state.md` §4) — THE CAPTURE SEAM'S LAW, as module-scope
+// functions so the class holds ONE member and no state.⟩ **Settled, never streamed; read-only; total.**
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+/** **THE STAGE'S OWN SCROLL CONTAINER** (`ASM-B10-2`): `src/renderer/index.html`'s clause makes the stage zone "its own scroll
+ *  container" (`{ overflow: auto }`), so this selector — and NOT `document.scrollingElement`, which the same clause pins
+ *  non-scrollable — names the box the view's `offset` is read from and restored into. */
+const STAGE_DISPLAY_SCROLL_SELECTOR = '#app [id="zone:main"]'
+
+/** The stage's own id, which the restore also addresses — the SAME authored id the content-root whitelist above uses, so the
+ *  seam and the reconcile cannot disagree about which element the page surface is. */
+
+/** **ONE REPORT PER SETTLE**: a selection that moves N times in a burst settles once, and a scroll produces one report when it
+ *  stops. The window is short enough to feel immediate and long enough to coalesce a drag — and it is the ONLY timer here, so a
+ *  released observer leaves no work behind. */
+const STAGE_DISPLAY_SETTLE_MS = 50
+
+/** **THE CAPTURE'S REPORT — A POSITION *AND THE SUBJECT IT WAS READ FROM*** (§4; corrected by `B10-EX-02`, MEASURED: a blur on
+ *  tab-a's DOM whose settle landed 50 ms after the click's activation was written as **tab-b**'s entry, because the wiring asked
+ *  "who is active NOW?" at the settle instead of "whose DOM did this report read?" at the READ).
+ *
+ *  So `subject` is stamped HERE, at ARM time — the instant the DOM event fired — by the resolver the wiring injects (`subjectOf`)
+ *  and the runtime itself never interprets: it is an OPAQUE string (the runtime owns no tab and no store), and the wiring is the
+ *  one authority on which tab it names. `null` means "the resolver said nothing", and the wiring then falls back to its own
+ *  active tab — an absence, declared, never an invented subject.
+ *
+ *  **AND `caret` MAY BE `null` ON A BLUR** (`B10-EX-04`, MEASURED: a real `focusout` with the selection already outside the
+ *  surface produced 0 reports and 0 writes). A blur that cannot read a caret is still a blur: `blur: true` with `caret: null`
+ *  says exactly "the surface settled AWAY and the DOM no longer states where the caret was", and the capture then carries the
+ *  controller's own last-known slot. A blur that captured NOTHING is a hole, and this arm is what closes it.
+ *
+ *  Two kinds and no third: a `caret` (the family's `DisplayCaret`, the fork's `CaretState` minus its `ragId` — the record's stamp
+ *  is the subject, spelled once at the entry level) and a `view` (the scroll offset and the visible section's identity). */
+export type DisplayCaptureReport =
+  | { readonly kind: 'caret'; readonly caret: DisplayCaret | null; readonly blur: boolean; readonly subject: string | null }
+  | { readonly kind: 'view'; readonly view: DisplayView; readonly subject: string | null }
+
+/** **THE WIRING'S SUBJECT RESOLVER** (§4): the ONE thing the runtime asks about whose position this is, and it is asked at ARM
+ *  time and never at settle time (`B10-EX-02`). Optional, contained and total — a resolver that throws, or answers no
+ *  non-empty string, stamps `subject: null`. */
+export interface DisplayCaptureOptions {
+  readonly subjectOf?: () => string | null
+}
+
+/** A node-list-shaped value, or `null` — every DOM read in this section goes through a contained helper, because the
+ *  layout-less shim supplies no `getSelection`, no `createRange` and no scroll box and a getter is not a guard. */
+function stageChildrenOf(node: unknown): ArrayLike<unknown> | null {
+  if (node === null || typeof node !== 'object') return null
+  try {
+    const kids = (node as { childNodes?: unknown }).childNodes
+    if (kids === null || typeof kids !== 'object') return null
+    return typeof (kids as ArrayLike<unknown>).length === 'number' ? (kids as ArrayLike<unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+/** **THE CHILD-INDEX PATH FROM THE SURFACE ROOT TO `node`** — the SAME edge vocabulary as `RichCaretEdge`
+ *  (`edit-controller.ts:70-81`), computed by walking up: `[]` addresses the root itself, and a node outside the surface is
+ *  `null` (there is no path to state, so there is no caret to report). */
+function stageDisplayPathFrom(root: unknown, node: unknown): number[] | null {
+  let current: unknown = node
+  const path: number[] = []
+  let guard = 0
+  while (current !== root) {
+    if (guard++ > 512) return null
+    if (current === null || current === undefined || typeof current !== 'object') return null
+    let parent: unknown
+    try {
+      parent = (current as { parentNode?: unknown }).parentNode
+    } catch {
+      return null
+    }
+    const kids = stageChildrenOf(parent)
+    if (kids === null) return null
+    let index = -1
+    for (let at = 0; at < kids.length; at += 1) {
+      if (kids[at] === current) {
+        index = at
+        break
+      }
+    }
+    if (index < 0) return null
+    path.unshift(index)
+    current = parent
+  }
+  return path
+}
+
+/** One selection edge as the record states it, or `null` — a non-string node with a non-integer offset is not an edge. */
+function stageDisplayEdgeOf(root: unknown, node: unknown, offset: unknown): { path: number[]; offset: number } | null {
+  if (typeof offset !== 'number' || !Number.isInteger(offset) || offset < 0) return null
+  const path = stageDisplayPathFrom(root, node)
+  return path === null ? null : { path, offset }
+}
+
+/** **THE CARET, READ OFF THE DOM** (§4): `window.getSelection()`'s anchor and focus, resolved as child-index paths from the
+ *  surface root, plus `focused` — which is `true` only while the surface IS the document's active element, i.e. only while the
+ *  caret is the operator's own. A selection that has left the surface (or no selection at all) is no report. */
+function stageDisplayCaretIn(surface: unknown): DisplayCaret | null {
+  const win = typeof window === 'undefined' ? null : (window as unknown as { getSelection?: unknown })
+  if (win === null || typeof win.getSelection !== 'function') return null
+  let selection: unknown
+  try {
+    selection = (win.getSelection as () => unknown).call(window)
+  } catch {
+    return null
+  }
+  if (selection === null || typeof selection !== 'object') return null
+  const read = (member: string): unknown => {
+    try {
+      return (selection as Record<string, unknown>)[member]
+    } catch {
+      return null
+    }
+  }
+  const anchor = stageDisplayEdgeOf(surface, read('anchorNode'), read('anchorOffset'))
+  const focus = stageDisplayEdgeOf(surface, read('focusNode'), read('focusOffset'))
+  if (anchor === null || focus === null) return null
+  let focused = false
+  try {
+    const doc = (surface as { ownerDocument?: unknown }).ownerDocument
+    focused = (doc as { activeElement?: unknown } | null | undefined)?.activeElement === surface
+  } catch {
+    focused = false
+  }
+  return { kind: 'rich', anchor, focus, focused }
+}
+
+/** The identity of the first visible TOP-LEVEL block inside the stage, or `''` — `section` is an IDENTITY STAMP and never an
+ *  authority (§4: `scrollIntoView` is refused), so this is the best answer the DOM can give and an unresolvable stage answers
+ *  the empty string rather than inventing a name. */
+function stageDisplayVisibleSection(box: unknown, offset: number): string {
+  const kids = stageChildrenOf(box)
+  if (kids === null) return ''
+  for (let at = 0; at < kids.length; at += 1) {
+    const block = kids[at]
+    if (block === null || typeof block !== 'object') continue
+    try {
+      const top = (block as { offsetTop?: unknown }).offsetTop
+      const height = (block as { offsetHeight?: unknown }).offsetHeight
+      if (typeof top !== 'number' || typeof height !== 'number' || !Number.isFinite(top) || !Number.isFinite(height)) continue
+      if (top + height <= offset) continue
+      const id = (block as { id?: unknown }).id
+      if (typeof id === 'string' && id !== '') return id
+      const data = (block as { dataset?: unknown }).dataset
+      const nodeId = data === null || typeof data !== 'object' ? undefined : (data as { nodeId?: unknown }).nodeId
+      return typeof nodeId === 'string' ? nodeId : ''
+    } catch {
+      continue
+    }
+  }
+  return ''
+}
+
+/** **THE VIEW, READ OFF THE DOM** (§4): `offset` is the stage's own `scrollTop` (the restore's ONLY number) and `section` is
+ *  the first visible top-level block's identity. A box whose `scrollTop` is not a finite non-negative number is no report. */
+function stageDisplayViewIn(box: unknown): DisplayView | null {
+  if (box === null || typeof box !== 'object') return null
+  let raw: unknown
+  try {
+    raw = (box as { scrollTop?: unknown }).scrollTop
+  } catch {
+    return null
+  }
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0) return null
+  const offset = Math.round(raw)
+  return { offset, section: stageDisplayVisibleSection(box, offset) }
+}
+
 
 /** U-STATE-1b — the content roots of an envelope: `rag-<id>` document subtrees,
  *  `pane-<id>` app-graph panes, the pinned `editor-toolbar`, the pinned
@@ -376,6 +552,258 @@ export class Runtime {
   /** Bootstrap render — called once after the mount is available. */
   bootstrap(): void {
     this.render()
+  }
+
+  /** ⟨Unit `B-10` `stage-display-state` §4 — **THE CAPTURE SEAM: THE ONE NEW MEMBER, AND THE ONLY PLACE A DOM SELECTION OR A
+   *  SCROLL IS READ.**⟩ It reports SPECIMENS OF A POSITION — a settled caret over `#page-edit-surface`, a settled scroll over
+   *  `#app [id="zone:main"]` (`ASM-B10-2`) — and **IT WRITES NOTHING**: no store verb, no record call, no `state-slice`, no DOM
+   *  write and no re-render. The report is DATA handed to `renderer.ts`, which is the only layer that knows whose position it is
+   *  (the runtime owns no tab, so the SUBJECT it stamps is an opaque string the wiring supplies and interprets).
+   *
+   *  **SETTLED, NEVER STREAMED** (§2's adjudication): a selection that moves forty times produces ONE report when it settles, and
+   *  a scroll produces one report when it stops. The caret's `path`/`offset` are the SAME edge vocabulary the record states
+   *  (`RichCaretEdge`, `edit-controller.ts:70-81`) resolved from the surface root, and its `focused` is read off the DOM.
+   *
+   *  **THREE CORRECTIONS, EACH MEASURED ON THE ADVERSARIAL PASS (`B10-EX-02`, `B10-EX-03`, `B10-EX-04`) AND EACH A HOLE THE
+   *  FIRST SHIPPING LEFT OPEN:**
+   *   · **THE SUBJECT IS STAMPED WHEN THE EVENT FIRES, NOT WHEN THE SETTLE LANDS** (`B10-EX-02`): a blur on tab-a's DOM whose
+   *     settle landed 50 ms after the click's activation was written as tab-b's entry, because the report carried no subject and
+   *     the wiring asked "who is active NOW?". `options.subjectOf` is the wiring's resolver and it is asked at ARM time;
+   *   · **THE LISTENERS LIVE ON THE DOCUMENT AND THE SURFACE IS RESOLVED PER ARM** (`B10-EX-03`): every document mount drops the
+   *     content roots, so a surface bound at registration became a detached node still holding the `focusout` listener while a
+   *     selection in the NEW `#page-edit-surface` produced 0 reports. A document-delegated `focusout` (contained: the losing
+   *     element must be inside the CURRENT surface) and a per-arm lookup are total, add no re-assembly, and survive the re-author;
+   *   · **A BLUR ALWAYS REPORTS** (`B10-EX-04`): where the DOM no longer states a caret, the blur still emits
+   *     `{caret: null, blur: true}` and the capture carries the controller's own last-known slot. A blur that captured nothing was
+   *     not an arm, it was a hole.
+   *
+   *  **TOTAL, AND A DECLARED NO-OP WHERE THE DOM OR A MEMBER IS ABSENT** (`D-10`): the layout-less vitest shim supplies neither
+   *  `getSelection` nor a scroll box, so this member answers a callable release and observes nothing — it never throws at any
+   *  argument, a listener that throws is CONTAINED (and starves no sibling), and the release is idempotent and total. */
+  observeDisplayState(listener: (report: DisplayCaptureReport) => void, options?: DisplayCaptureOptions): () => void {
+    const noop = (): void => undefined
+    if (typeof listener !== 'function') return noop
+    if (typeof window === 'undefined' || window === null) return noop
+    if (typeof document === 'undefined' || document === null) return noop
+    try {
+      const getSelection = (window as unknown as { getSelection?: unknown }).getSelection
+      if (typeof getSelection !== 'function') return noop
+    } catch {
+      return noop
+    }
+    /** **THE SUBJECT — ASKED AT ARM TIME AND ONLY THEN** (`B10-EX-02`). The resolver is the wiring's (`options.subjectOf`); the
+     *  runtime hands on whatever opaque string it answers and never interprets one. A resolver that throws, or answers no
+     *  non-empty string, stamps `null` (the wiring's own declared fallback), never an exception and never an invented tab. */
+    const subjectAt = (): string | null => {
+      const route = options === undefined || options === null ? undefined : options.subjectOf
+      if (typeof route !== 'function') return null
+      try {
+        const answer = route()
+        return typeof answer === 'string' && answer !== '' ? answer : null
+      } catch {
+        return null
+      }
+    }
+    /** The surface root, contained: a throwing `getElementById` is the absent surface. */
+    const surfaceOf = (): unknown => {
+      try {
+        return document.getElementById(PAGE_EDIT_SURFACE_ID) ?? null
+      } catch {
+        return null
+      }
+    }
+    /** The stage's scroll box, contained (the selector first — `ASM-B10-2` — then the authored id as the same element). */
+    const scrollBoxOf = (): unknown => {
+      try {
+        const bySelector = document.querySelector(STAGE_DISPLAY_SCROLL_SELECTOR)
+        if (bySelector !== null && bySelector !== undefined) return bySelector
+      } catch {
+        /* fall through to the id lookup */
+      }
+      try {
+        return document.getElementById('zone:main') ?? null
+      } catch {
+        return null
+      }
+    }
+    /** **THE SURFACE IS RESOLVED PER ARM, NEVER BOUND ONCE** (`B10-EX-03`, MEASURED: every document mount drops the content
+     *  roots — `runtime.ts`'s own teardown — so the node this member bound at registration became a DETACHED node that still
+     *  held the listener, while a selection in the NEW `#page-edit-surface` produced **0 reports**: the `m6`/`D-40` class, a
+     *  capture that is dead while every counter and paint looks healthy). So the listeners live on the DOCUMENT (which survives
+     *  every re-author) and the surface is looked up when an event arrives. Nothing here re-assembles anything: a lookup is a
+     *  `getElementById`, never a mount, never a `loadAppGraph`. */
+    const targetOf = (event: unknown): unknown => {
+      if (event === null || typeof event !== 'object') return null
+      try {
+        return (event as { target?: unknown }).target ?? null
+      } catch {
+        return null
+      }
+    }
+    /** True iff `target` is `surface` or one of its descendants — the CONTAINMENT a delegated `focusout` needs, so a blur
+     *  anywhere else on the page is not this surface's settle-away. */
+    const withinSurface = (surface: unknown, target: unknown): boolean => {
+      let current: unknown = target
+      let guard = 0
+      while (guard++ < 512) {
+        if (current === surface) return true
+        if (current === null || current === undefined || typeof current !== 'object') return false
+        try {
+          current = (current as { parentNode?: unknown }).parentNode
+        } catch {
+          return false
+        }
+      }
+      return false
+    }
+    /** THE ONE REGISTRATION HELPER, contained both ways: an absent/broken `addEventListener` is an unobserved arm. The handler
+     *  takes the event (a delegated listener reads `event.target`) and `capture` is spelled because `scroll` does not bubble. */
+    const listen = (target: unknown, type: string, handler: (event?: unknown) => void, capture = false): (() => void) => {
+      if (target === null || typeof target !== 'object') return noop
+      try {
+        const add = (target as { addEventListener?: unknown }).addEventListener
+        if (typeof add !== 'function') return noop
+        if (capture) (add as (t: string, h: (event?: unknown) => void, c: boolean) => void).call(target, type, handler, true)
+        else (add as (t: string, h: (event?: unknown) => void) => void).call(target, type, handler)
+      } catch {
+        return noop
+      }
+      return (): void => {
+        try {
+          const remove = (target as { removeEventListener?: unknown }).removeEventListener
+          if (typeof remove === 'function') (remove as (t: string, h: (event?: unknown) => void) => void).call(target, type, handler)
+        } catch {
+          /* a withdrawal that threw has still withdrawn nothing further; it never escapes here */
+        }
+      }
+    }
+    let live = true
+    let caretTimer: ReturnType<typeof setTimeout> | null = null
+    let viewTimer: ReturnType<typeof setTimeout> | null = null
+    /** **THE ARM'S OWN SNAPSHOT: the SUBJECT and the SURFACE the event was read in** (`B10-EX-02`/`B10-EX-03`). Taken when the
+     *  DOM event fires, used when the settle lands — so a settle that arrives after the tab has already changed is still
+     *  attributed to the DOM it read, and a re-authored surface is found because the lookup is per-arm. The burst is COALESCED
+     *  (`§2`: one report per settle), and a `blur` inside the burst UPGRADES it: a settle-away may never be swallowed by a move. */
+    let armedCaret: { subject: string | null; surface: unknown; blur: boolean } | null = null
+    let armedView: { subject: string | null; box: unknown } | null = null
+    const emit = (report: DisplayCaptureReport): void => {
+      if (!live) return
+      try {
+        listener(report)
+      } catch {
+        /* the caller's listener, the caller's error — contained, and no sibling report is starved by it */
+      }
+    }
+    const settled = (run: () => void): void => {
+      try {
+        run()
+      } catch {
+        /* a settle that threw reports nothing; the observer stays armed */
+      }
+    }
+    /** The caret's settle. **AND IT ALWAYS REPORTS A BLUR** (`B10-EX-04`): where the DOM no longer states a caret the report
+     *  carries `caret: null, blur: true` rather than nothing at all, and the capture carries the controller's last-known slot. */
+    const settleCaret = (): void => {
+      const armed = armedCaret
+      armedCaret = null
+      if (armed === null) return
+      const surface = armed.surface === null || armed.surface === undefined ? surfaceOf() : armed.surface
+      const caret = stageDisplayCaretIn(surface)
+      if (caret !== null) {
+        emit({ kind: 'caret', caret, blur: armed.blur, subject: armed.subject })
+        return
+      }
+      // A MOVE THAT STATES NO CARET REPORTS NOTHING (§4: a selection that has left the surface is no report) — but the BLUR
+      // is the record's `commit-on-blur` trigger, so it reports the absence of a position instead of vanishing.
+      if (!armed.blur) return
+      emit({ kind: 'caret', caret: null, blur: true, subject: armed.subject })
+    }
+    const settleView = (): void => {
+      const armed = armedView
+      armedView = null
+      if (armed === null) return
+      const box = armed.box === null || armed.box === undefined ? scrollBoxOf() : armed.box
+      const view = stageDisplayViewIn(box)
+      if (view !== null) emit({ kind: 'view', view, subject: armed.subject })
+    }
+    const armCaret = (blur: boolean, surface: unknown): void => {
+      if (!live) return
+      if (armedCaret === null) armedCaret = { subject: subjectAt(), surface, blur }
+      else if (blur) armedCaret.blur = true
+      if (caretTimer !== null) return
+      caretTimer = setTimeout(() => {
+        caretTimer = null
+        if (!live) return
+        settled(settleCaret)
+      }, STAGE_DISPLAY_SETTLE_MS)
+    }
+    const armView = (box: unknown): void => {
+      if (!live) return
+      if (armedView === null) armedView = { subject: subjectAt(), box }
+      if (viewTimer !== null) return
+      viewTimer = setTimeout(() => {
+        viewTimer = null
+        if (!live) return
+        settled(settleView)
+      }, STAGE_DISPLAY_SETTLE_MS)
+    }
+    /** The selection moved — a MOVE arm: it reads the surface that is live NOW (`B10-EX-03`) and writes nothing. */
+    const onSelectionChange = (): void => {
+      const surface = surfaceOf()
+      if (surface === null) return
+      armCaret(false, surface)
+    }
+    /** **THE SURFACE'S SETTLE-AWAY, DELEGATED** (§2's `commit-on-blur` home): `focusout` does not bubble out of a detached
+     *  subtree, so the listener is on the DOCUMENT and the containment test — is the losing element inside the CURRENT
+     *  surface? — is what makes it this surface's blur rather than any other element's. */
+    const onFocusOut = (event?: unknown): void => {
+      const surface = surfaceOf()
+      if (surface === null) return
+      const target = targetOf(event)
+      if (target !== null && !withinSurface(surface, target)) return
+      armCaret(true, surface)
+    }
+    /** The stage's own box scrolled. A CAPTURE-PHASE listener on the document sees every element's scroll (the event does not
+     *  bubble, but it does propagate), so the target decides whether THIS box moved. */
+    const onScroll = (event?: unknown): void => {
+      const box = scrollBoxOf()
+      if (box === null || box === undefined) return
+      const target = targetOf(event)
+      if (target !== null && target !== box) return
+      armView(box)
+    }
+    const withdrawals: Array<() => void> = [
+      // THE SELECTION'S SETTLE: `selectionchange` fires on the document, which is where the browser announces it — and the
+      // document is the one node a re-author never replaces.
+      listen(document, 'selectionchange', onSelectionChange),
+      // THE SURFACE'S SETTLE-AWAY, DELEGATED TO THE DOCUMENT for the same reason (`B10-EX-03`).
+      listen(document, 'focusout', onFocusOut),
+      // THE BOX'S SCROLL, capture-phase, resolved per event.
+      listen(document, 'scroll', onScroll, true),
+    ]
+    return (): void => {
+      if (!live) return
+      live = false
+      armedCaret = null
+      armedView = null
+      if (caretTimer !== null) {
+        try {
+          clearTimeout(caretTimer)
+        } catch {
+          /* nothing to clear */
+        }
+        caretTimer = null
+      }
+      if (viewTimer !== null) {
+        try {
+          clearTimeout(viewTimer)
+        } catch {
+          /* nothing to clear */
+        }
+        viewTimer = null
+      }
+      for (const withdraw of withdrawals) withdraw()
+    }
   }
 
   // ---- target resolution -------------------------------------------------
